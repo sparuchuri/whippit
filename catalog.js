@@ -70,7 +70,10 @@ function refreshCategories() {
 refreshCategories();
 
 export function registerRecipe(recipe, customIngredients=[]) {
-  if (byId[recipe.id]) return;
+  if (byId[recipe.id]) {
+    if(recipe.custom && byId[recipe.id].custom) {Object.assign(byId[recipe.id],recipe); for(const item of customIngredients)ingredients[item.id]=item;}
+    return;
+  }
   for (const item of customIngredients) ingredients[item.id] = item;
   recipes.push(recipe);
   byId[recipe.id] = recipe;

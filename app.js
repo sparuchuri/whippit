@@ -1,15 +1,19 @@
 import { byId, ingredients, staples, categories, recipes, tags } from './catalog.js';
 import { dayNames, defaults, generate, swaps, grocery, money, amount, weekKey, dateLabel, shiftWeek, slotsFor, eligibility } from './planner.js';
-import { readWeeks, writeWeeks } from './storage.js';
+import {readWeeks,writeWeeks,initializeStorage,subscribeSync,readPreferences,writePreferences,readLibrary as readSavedLibrary} from './storage.js';
+import {setupAccountUI} from './account-ui.js';
 import {createRecipeLibrary} from './recipe-library.js';
 import {recipeMatches} from './recipe-tools.js';
 import {icon,dishMark} from './ui.js';
 
 const $ = selector => document.querySelector(selector);
 const form = $('#form'), results = $('#results'), dialog = $('#detail');
+await initializeStorage();
 const setup = $('#setup-dialog');
 document.querySelectorAll('[data-icon]').forEach(el => {el.innerHTML=icon(el.dataset.icon);});
 const weeks = readWeeks();
+let formDirty=false;
+setupAccountUI();
 let week = weekKey(), view = 'week', options = [], optionIndex = 0, draft = null;
 let current = weeks[week] || null;
 let generation = null;
@@ -47,7 +51,7 @@ function populateCatalogFields() {
   $('#exclusions').innerHTML = categories.map(tag => `<label><input type="checkbox" name="exclude" value="${esc(tag)}">${esc(tag)}</label>`).join('');
   $('#ingredients').innerHTML = Object.values(ingredients).map(item => `<label><input type="checkbox" name="excludeIngredient" value="${item.id}">${esc(item.name)}</label>`).join('');
   $('#pantry').innerHTML = staples.map(id => `<label><input type="checkbox" name="pantry" value="${id}">${esc(ingredients[id].name)} on hand</label>`).join('');
-  $('#prices').innerHTML = Object.values(ingredients).map(item => `<div><label class="field">${esc(item.name)} · ${amount(item.pack,item.unit)} ($)<input type="number" min="0" max="999" step=".01" name="price-${item.id}" placeholder="${(item.cents/100).toFixed(2)}"></label><label class="field">On hand (${item.unit})<input type="number" min="0" max="100000" step=".25" name="stock-${item.id}" placeholder="0" aria-label="${esc(item.name)} on hand (${item.unit})"></label></div>`).join('');
+  $('#prices').innerHTML = Object.values(ingredients).map(item => `<div><label class="field">${esc(item.name)} · ${amount(item.pack,item.unit)} ($)<input type="number" min="0" max="999" step=".01" name="price-${item.id}" placeholder="${item.unpriced?'Add price':(item.cents/100).toFixed(2)}"></label><label class="field">On hand (${item.unit})<input type="number" min="0" max="100000" step=".25" name="stock-${item.id}" placeholder="0" aria-label="${esc(item.name)} on hand (${item.unit})"></label></div>`).join('');
 }
 populateCatalogFields();
 
@@ -106,16 +110,19 @@ function commit() {
   current = draft;
   weeks[week] = current;
   const saved = writeWeeks(weeks);
+  writePreferences(current.config);
   draft = null;
   options = [];
+  formDirty=false;
   announce(saved ? 'Week saved.' : 'Browser storage is unavailable. This week is open for this session.');
   render();
 }
 function summary(plan,basket) {
   const delta = cap(plan.config)-basket.cents;
+  const unpriced=basket.lines.filter(line=>line.packs&&line.unpriced).length;
   const stats = [plan.assignments.filter(slot => slot.type === 'dinner').length+' dinners'];
   if (plan.config.lunchDays.length) stats.push(plan.config.lunchDays.length+' lunch days');
-  return `<div class="summary ${delta < 0 ? 'over' : ''}"><div><b>${stats.join(' · ')}</b><small>${delta === 0 ? 'On target' : money(Math.abs(delta))+(delta > 0 ? ' below target' : ' over target')} · Sample grocery estimate</small></div><strong>${money(basket.cents)}</strong></div>`;
+  return `<div class="summary ${delta < 0 ? 'over' : ''}"><div><b>${stats.join(' · ')}</b><small>${unpriced?'Partial estimate':delta === 0 ? 'On target' : money(Math.abs(delta))+(delta > 0 ? ' below target' : ' over target')} · ${unpriced?unpriced+' items still need prices':'Sample grocery estimate'}</small></div><strong>${money(basket.cents)}${unpriced?' +':''}</strong></div>`;
 }
 function prepText(slot) {
   const prep = dateLabel(week,slot.prepDay,{weekday:'long',month:'short',day:'numeric'});
@@ -154,7 +161,7 @@ function renderShop(plan,basket) {
     <div class="actions"><button id="copy">Copy list</button>${draft ? '<button data-go-week>Review and save this preview</button>' : ''}</div>`+
     groups.map(aisle => `<section class="panel shop-group"><h3>${esc(aisle)}</h3>${buy.filter(item => item.aisle === aisle).map(item =>
       `<label class="shop-row ${plan.checked.includes(item.signature) ? 'checked' : ''}"><input type="checkbox" data-item="${item.signature}" ${checked(plan.checked.includes(item.signature))} ${draft ? 'disabled' : ''}>
-      <span class="item">${esc(item.name)}<br><small class="muted">${item.packs} × ${amount(item.pack,item.unit)} pack</small></span><span class="price">${money(item.cost)}</span></label>`).join('')}</section>`).join('')+
+      <span class="item">${esc(item.name)}<br><small class="muted">${item.packs} × ${amount(item.pack,item.unit)} pack</small></span><span class="price">${item.unpriced?'Price needed':money(item.cost)}</span></label>`).join('')}</section>`).join('')+
     (!buy.length ? '<p class="muted">Your pantry covers the planned ingredients.</p>' : '')+
     (pantry.length ? `<section class="panel shop-group"><h3>Using from your pantry</h3>${pantry.map(item => `<div class="leftover"><span>${esc(item.name)}</span><span>${amount(item.usedPantry,item.unit)}</span></div>`).join('')}</section>` : '')+
     (remaining.length ? `<section class="panel shop-group"><h3>Expected perishable leftovers</h3>${remaining.map(item => `<div class="leftover"><span>${esc(item.name)}</span><span>${amount(item.remaining,item.unit)}</span></div>`).join('')}</section>` : '');
@@ -196,14 +203,14 @@ function changeWeek(delta) {
   draft = null;
   options = [];
   current = weeks[week] || null;
-  fill(current?.config || defaults());
+  fill(current?.config || readPreferences() || defaults());
   announce();
   render();
 }
 function showDialog(title,html) {
   $('#dialog-title').textContent = title;
   $('#dialog-content').innerHTML = html;
-  dialog.showModal();
+  if(!dialog.open) dialog.showModal();
 }
 function showRecipe(id) {
   const slot = active().assignments.find(item => item.id === id);
@@ -217,7 +224,7 @@ function showRecipeDetails(item,servings,forLunch=false) {
   showDialog(item.name,`<div class="recipe-detail-meta"><p class="muted">${item.minutes} min · ${servings} servings</p>${library.favoriteButton(item)}</div>
     ${library.attribution(item)}${storage}
     <h3>Ingredients</h3><ul class="dialog-list">${list(Object.entries(item.parts).map(([key,value]) => esc(ingredients[key].name)+' · '+amount(value*servings/item.servings,ingredients[key].unit)))}</ul>
-    <h3>Steps</h3>${steps}`);
+    ${item.ingredientNotes?.length?'<h3>Recipe notes</h3><ul class="dialog-list">'+list(item.ingredientNotes.map(esc))+'</ul>':''}<h3>Steps</h3>${steps}`);
 }
 function showSwaps(id) {
   const plan = current, currentBasket = grocery(plan.assignments,plan.config);
@@ -283,7 +290,9 @@ $('#suggest').addEventListener('click',() => {
 form.addEventListener('submit',async event => {
   event.preventDefault();
   if (generation) return;
-  const config = readConfig(), ids = new Set(slotsFor(config).map(slot=>slot.id));
+  const config = readConfig();
+  writePreferences(config);formDirty=false;
+  const ids = new Set(slotsFor(config).map(slot=>slot.id));
   const missingLocks = Object.keys(current?.locks || {}).filter(id => !ids.has(id));
   if (missingLocks.length) { announce('Unlock meals you want to remove before changing their dates.'); return; }
   const locks = current?.locks || {};
@@ -293,12 +302,15 @@ form.addEventListener('submit',async event => {
   const submit = form.querySelector('[type=submit]');
   submit.disabled = true;
   submit.innerHTML=icon('sparkles')+'Planning your week…';
+  submit.setAttribute('aria-busy','true');
   announce('Planning meals and checking grocery packages…');
   const proposal = await job.result;
   if (generation !== job) return;
   generation = null;
   submit.disabled = false;
   submit.innerHTML=icon('sparkles')+'Generate week';
+  submit.removeAttribute('aria-busy');
+  if (!proposal) return;
   if (proposal.error) {announce(proposal.error);return;}
   options = proposal.options;
   optionIndex = 0;
@@ -374,6 +386,30 @@ results.addEventListener('change',event => {
   results.querySelector(`input[data-item="${signature}"]`)?.focus();
 });
 
-fill(current?.config || defaults());
+fill(current?.config || readPreferences() || defaults());
+form.addEventListener('change',()=>{formDirty=true; if(form.checkValidity())writePreferences(readConfig());});
+let lastRemote=JSON.stringify(readWeeks());
+let lastLibrary=JSON.stringify(library.custom());
+let lastSavedLibrary=JSON.stringify(readSavedLibrary());
+subscribeSync(status=>{
+  if(!status.remote)return;
+  const updated=readWeeks(),signature=JSON.stringify(updated);
+  const settings=readConfig();
+  const savedLibrarySignature=JSON.stringify(readSavedLibrary());
+  const libraryChanged=savedLibrarySignature!==lastSavedLibrary;
+  lastSavedLibrary=savedLibrarySignature;
+  library.reload();
+  // Sync can add ingredients, so refresh form choices while retaining the current input.
+  const librarySignature=JSON.stringify(library.custom());
+  if(librarySignature!==lastLibrary){populateCatalogFields();fill(settings);lastLibrary=librarySignature;}
+  if(signature!==lastRemote){
+    for(const key of Object.keys(weeks))delete weeks[key];Object.assign(weeks,updated);
+    current=weeks[week] || null;lastRemote=signature;
+    if(!draft&&!formDirty)fill(current?.config || readPreferences() || defaults());
+    if(!draft)render();
+  }else if(libraryChanged&&view==='recipes'&&!document.querySelector('#recipe-editor').open){
+    library.refresh();
+  }
+});
 render();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});

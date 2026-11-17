@@ -50,7 +50,7 @@ export function grocery(assignments, config, details=true) {
     cents += cost;
     waste += remaining/item.pack*price*item.risk;
     if (details && (need || remaining)) lines.push({
-      ...item,need,packs,cost,remaining,usedPantry:Math.min(onHand,need),
+      ...item,unpriced:item.unpriced && config.prices[id]==null,need,packs,cost,remaining,usedPantry:Math.min(onHand,need),
       signature:[id,item.pack,packs].join(':')
     });
   }

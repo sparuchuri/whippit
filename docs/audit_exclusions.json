@@ -1,0 +1,257 @@
+[
+  {
+    "url": "https://www.loveandlemons.com/homemade-pasta-recipe/",
+    "name": "Homemade Pasta",
+    "reason": "ingredient component only"
+  },
+  {
+    "url": "https://www.loveandlemons.com/lentil-soup/",
+    "name": "Best Lentil Soup",
+    "reason": "duplicate dish title"
+  },
+  {
+    "url": "https://www.recipetineats.com/chicken-sharwama-middle-eastern/",
+    "name": "Chicken Shawarma (Middle Eastern)",
+    "reason": "already represented by existing adaptation source"
+  },
+  {
+    "url": "https://www.recipetineats.com/one-pot-greek-chicken-lemon-rice/",
+    "name": "One Pot Greek Chicken and Lemon Rice",
+    "reason": "already represented by existing adaptation source"
+  },
+  {
+    "url": "https://thewoksoflife.com/chinese-chicken-broccoli-brown-sauce/",
+    "name": "Chicken and Broccoli",
+    "reason": "already represented by existing adaptation source"
+  },
+  {
+    "url": "https://thewoksoflife.com/beef-with-broccoli-all-purpose-stir-fry-sauce/",
+    "name": "Beef and Broccoli",
+    "reason": "already represented by existing adaptation source"
+  },
+  {
+    "url": "https://www.recipetineats.com/fluffy-coconut-rice/",
+    "name": "Restaurant Style Coconut Rice (Coconut Milk)",
+    "reason": "side or appetizer category only"
+  },
+  {
+    "url": "https://www.loveandlemons.com/cauliflower-soup/",
+    "name": "Cauliflower Soup",
+    "reason": "side or appetizer category only"
+  },
+  {
+    "url": "https://www.loveandlemons.com/how-to-cook-tofu/",
+    "name": "How to Cook Tofu",
+    "reason": "preparation technique only"
+  },
+  {
+    "url": "https://www.recipetineats.com/chinese-beef-with-honey-and-black-pepper-sauce/",
+    "name": "Beef Stir Fry with Honey and Black Pepper Sauce",
+    "reason": "already represented by existing adaptation source"
+  },
+  {
+    "url": "https://www.recipetineats.com/thai-basil-chicken-stir-fry/",
+    "name": "Thai Chilli Basil Chicken",
+    "reason": "already represented by existing adaptation source"
+  },
+  {
+    "url": "https://www.loveandlemons.com/how-to-cook-brown-rice/",
+    "name": "How to Cook Brown Rice",
+    "reason": "preparation technique only"
+  },
+  {
+    "url": "https://www.loveandlemons.com/french-toast-casserole/",
+    "name": "French Toast Casserole",
+    "reason": "side or appetizer category only"
+  },
+  {
+    "url": "https://www.recipetineats.com/chicken-caesar-salad/",
+    "name": "Caesar Salad - with homemade Caesar Salad Dressing",
+    "reason": "light side salad"
+  },
+  {
+    "url": "https://thewoksoflife.com/how-to-velvet-chicken-stir-fry/",
+    "name": "How to Velvet Chicken for Stir-Fry",
+    "reason": "preparation technique only"
+  },
+  {
+    "url": "https://www.recipetineats.com/creamy-lemon-herb-baked-risotto-recipe/",
+    "name": "No-Stir Creamy Lemon & Herb Baked Risotto (it's magic!)",
+    "reason": "side or appetizer category only"
+  },
+  {
+    "url": "https://www.recipetineats.com/chicken-marinade/",
+    "name": "A great Chicken Marinade (great grilled or pan seared!)",
+    "reason": "duplicate dish title"
+  },
+  {
+    "url": "https://www.recipetineats.com/buttery-seasoned-rice/",
+    "name": "Buttery Seasoned Rice",
+    "reason": "side or appetizer category only"
+  },
+  {
+    "url": "https://thewoksoflife.com/prepare-beef-for-stir-fry/",
+    "name": "How to Velvet Beef for Stir-fry",
+    "reason": "preparation technique only"
+  },
+  {
+    "url": "https://www.recipetineats.com/garlic-butter-rice-with-kale-recipe/",
+    "name": "Garlic Butter Rice with Kale",
+    "reason": "side or appetizer category only"
+  },
+  {
+    "url": "https://thewoksoflife.com/string-bean-chicken-stir-fry/",
+    "name": "String Bean Chicken",
+    "reason": "already represented by existing adaptation source"
+  },
+  {
+    "url": "https://www.recipetineats.com/curried-rice-basmati-rice-recipe/",
+    "name": "Curried Rice (Basmati rice)",
+    "reason": "side or appetizer category only"
+  },
+  {
+    "url": "https://www.loveandlemons.com/cold-cucumber-soup/",
+    "name": "Cold Cucumber Soup",
+    "reason": "side or appetizer category only"
+  },
+  {
+    "url": "https://www.recipetineats.com/velveting-chicken-chinese-restaurant-tenderise-chicken/",
+    "name": "How to Tenderise Chicken for Stir Fries (Chinese secret!)",
+    "reason": "preparation technique only"
+  },
+  {
+    "url": "https://www.recipetineats.com/chicken-brine-recipe/",
+    "name": "Chicken Brine",
+    "reason": "preparation technique only"
+  },
+  {
+    "url": "https://thewoksoflife.com/classic-chicken-fried-rice/",
+    "name": "Chicken Fried Rice",
+    "reason": "duplicate dish title"
+  },
+  {
+    "url": "https://www.loveandlemons.com/black-bean-and-corn-salad/",
+    "name": "Black Bean and Corn Salad",
+    "reason": "side or appetizer category only"
+  },
+  {
+    "url": "https://www.recipetineats.com/how-to-tenderise-beef-velveting-beef/",
+    "name": "How to tenderise beef (velveting beef)",
+    "reason": "preparation technique only"
+  },
+  {
+    "url": "https://www.recipetineats.com/creamy-corn-casserole/",
+    "name": "Creamy Corn Casserole",
+    "reason": "side or appetizer category only"
+  },
+  {
+    "url": "https://www.recipetineats.com/dan-dan-noodles-spicy-sichuan-noodles/",
+    "name": "Dan Dan Noodles",
+    "reason": "duplicate dish title"
+  },
+  {
+    "url": "https://www.loveandlemons.com/french-onion-soup/",
+    "name": "French Onion Soup",
+    "reason": "duplicate dish title"
+  },
+  {
+    "url": "https://www.recipetineats.com/cauliflower-fried-rice/",
+    "name": "Cauliflower Fried Rice",
+    "reason": "side or appetizer category only"
+  },
+  {
+    "url": "https://www.recipetineats.com/filipino-pork-adobo/",
+    "name": "Pork Adobo",
+    "reason": "duplicate dish title"
+  },
+  {
+    "url": "https://www.loveandlemons.com/blueberry-oatmeal-casserole/",
+    "name": "Blueberry Oatmeal Casserole",
+    "reason": "side or appetizer category only"
+  },
+  {
+    "url": "https://www.recipetineats.com/garlic-noodles/",
+    "name": "Garlic Noodles",
+    "reason": "side or appetizer category only"
+  },
+  {
+    "url": "https://thewoksoflife.com/chinese-cured-pork-belly/",
+    "name": "Chinese Cured Pork Belly",
+    "reason": "ingredient component only"
+  },
+  {
+    "url": "https://thewoksoflife.com/chinese-handmade-noodles/",
+    "name": "Chinese Handmade Noodles",
+    "reason": "ingredient component only"
+  },
+  {
+    "url": "https://www.recipetineats.com/brown-rice-salad/",
+    "name": "Mediterranean Brown Rice Salad",
+    "reason": "side or appetizer category only"
+  },
+  {
+    "url": "https://www.loveandlemons.com/spaghetti-bolognese/",
+    "name": "Spaghetti Bolognese",
+    "reason": "duplicate dish title"
+  },
+  {
+    "url": "https://thewoksoflife.com/homemade-chinese-egg-noodles/",
+    "name": "Homemade Chinese Egg Noodles",
+    "reason": "ingredient component only"
+  },
+  {
+    "url": "https://www.loveandlemons.com/air-fryer-tofu/",
+    "name": "Air Fryer Tofu",
+    "reason": "ingredient component only"
+  },
+  {
+    "url": "https://thewoksoflife.com/homemade-chicken-stock/",
+    "name": "Judy’s Easy Homemade Chicken Stock",
+    "reason": "stock only"
+  },
+  {
+    "url": "https://www.recipetineats.com/lentil-ragout-french-puy-lentils-side-dish/",
+    "name": "Lentil Ragout - French Puy lentil side dish",
+    "reason": "side or appetizer category only"
+  },
+  {
+    "url": "https://www.recipetineats.com/chicken-stock-recipe/",
+    "name": "Chicken stock recipe",
+    "reason": "stock only"
+  },
+  {
+    "url": "https://www.loveandlemons.com/how-to-cook-rice/",
+    "name": "How to Cook Rice",
+    "reason": "preparation technique only"
+  },
+  {
+    "url": "https://thewoksoflife.com/how-to-cook-rice-without-a-rice-cooker/",
+    "name": "How to Cook Rice Without a Rice Cooker",
+    "reason": "preparation technique only"
+  },
+  {
+    "url": "https://thewoksoflife.com/how-to-steam-rice/",
+    "name": "How to Steam Rice",
+    "reason": "preparation technique only"
+  },
+  {
+    "url": "https://www.recipetineats.com/changs-crispy-noodle-salad/",
+    "name": "Chang's Crispy Noodle Salad",
+    "reason": "side or appetizer category only"
+  },
+  {
+    "url": "https://thewoksoflife.com/homemade-rice-noodles/",
+    "name": "Homemade Rice Noodles",
+    "reason": "ingredient component only"
+  },
+  {
+    "url": "https://thewoksoflife.com/how-to-velvet-pork-for-stir-fry/",
+    "name": "How to Velvet Pork for Stir-fry",
+    "reason": "preparation technique only"
+  },
+  {
+    "url": "https://thewoksoflife.com/how-to-make-sticky-rice/",
+    "name": "How to Make Sticky Rice (Foolproof Method!)",
+    "reason": "preparation technique only"
+  }
+]

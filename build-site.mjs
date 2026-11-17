@@ -1,4 +1,4 @@
-import {mkdir,readFile,writeFile} from 'node:fs/promises';
+import {mkdir,readFile,writeFile,cp} from 'node:fs/promises';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 
 export const assetTypes = {
@@ -10,12 +10,14 @@ export const assetTypes = {
   'app.js':'text/javascript; charset=utf-8',
   'ui.js':'text/javascript; charset=utf-8',
   'catalog.js':'text/javascript; charset=utf-8',
+  'source-catalog.js':'text/javascript; charset=utf-8',
   'curated.js':'text/javascript; charset=utf-8',
   'planner.js':'text/javascript; charset=utf-8',
   'planner-worker.js':'text/javascript; charset=utf-8',
   'recipe-tools.js':'text/javascript; charset=utf-8',
   'recipe-library.js':'text/javascript; charset=utf-8',
   'storage.js':'text/javascript; charset=utf-8',
+  'account-ui.js':'text/javascript; charset=utf-8',
   'sw.js':'text/javascript; charset=utf-8',
   'LICENSE':'text/plain; charset=utf-8',
 };
@@ -26,13 +28,13 @@ async function build() {
     const binary = type === 'image/png';
     return [name,{type,binary,data:data.toString(binary ? 'base64' : 'utf8')}];
   }));
-  const input = await readFile(new URL('recipe-link.js',import.meta.url),'utf8');
+  const input = await readFile(new URL('recipe-link.js',import.meta.url),'utf8') + '\n' + await readFile(new URL('account-api.js',import.meta.url),'utf8');
   const assetCode = 'const assets = ' + JSON.stringify(Object.fromEntries(files)) + ';\n';
   const handler = `
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     const pathname = new URL(request.url).pathname;
-    if (pathname === '/api/recipe-import') return handleRecipeImport(request);
+    if (['/api/session','/api/state','/api/sync'].includes(pathname)) { try { return await handleAccountApi(request,env); } catch { return new Response(JSON.stringify({error:'Account sync is temporarily unavailable. Your device copy is safe.'}),{status:503,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}}); } }\n    if (pathname === '/api/recipe-import') return handleRecipeImport(request);
     const file = pathname === '/' ? 'index.html' : pathname.slice(1);
     const entry = Object.hasOwn(assets,file) ? assets[file] : null;
     if (!entry) return new Response('Not found',{status:404});
@@ -51,5 +53,8 @@ export default {
   const target = new URL('dist/server/',import.meta.url);
   await mkdir(fileURLToPath(target),{recursive:true});
   await writeFile(new URL('index.js',target), assetCode + input + '\n' + handler);
+  await mkdir(new URL('dist/.openai/',import.meta.url),{recursive:true});
+  await cp(new URL('.openai/hosting.json',import.meta.url),new URL('dist/.openai/hosting.json',import.meta.url));
+  await cp(new URL('drizzle/',import.meta.url),new URL('dist/.openai/drizzle/',import.meta.url),{recursive:true});
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await build();

@@ -1,4 +1,5 @@
 const publishers = new Map(Object.entries({
+  'cooking.nytimes.com':'NYT Cooking','bonappetit.com':'Bon Appétit','americastestkitchen.com':'America’s Test Kitchen',
   'budgetbytes.com':'Budget Bytes','recipetineats.com':'RecipeTin Eats','thewoksoflife.com':'The Woks of Life',
   'indianhealthyrecipes.com':'Swasthi’s Recipes','justonecookbook.com':'Just One Cookbook','maangchi.com':'Maangchi',
   'tiffycooks.com':'Tiffy Cooks','pickuplimes.com':'Pick Up Limes','allrecipes.com':'Allrecipes','seriouseats.com':'Serious Eats',

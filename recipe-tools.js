@@ -142,3 +142,29 @@ export function recipeMatches(item, query) {
   const words = keyName(query.replace(/[^\p{L}\p{N} ]/gu,' ')).split(' ').filter(Boolean);
   return words.every(word => haystack.includes(word));
 }
+
+// An import suggestion preserves source units when a canonical grocery match is uncertain.
+// The review screen always shows the original ingredient alongside this proposal.
+export function suggestIngredient(raw) {
+  let parsed=parseIngredient(raw);
+  if(parsed.id && parsed.quantity>0)return {...parsed,unit:ingredients[parsed.id].unit};
+  const text=clean(raw.replace(/[½¼¾⅓⅔⅛⅜⅝⅞⅕]/g,char=>fractions[char]));
+  const simplified=text.replace(/\b(?:small|medium|large|finely|freshly|grated|chopped|minced|diced|boneless|skinless)\b/gi,'').replace(/\([^)]*\)/g,'').replace(/\s+/g,' ').trim();
+  const match=parseIngredient(simplified);
+  if(match.id&&match.quantity>0)return {...match,raw,unit:ingredients[match.id].unit};
+  const prefix=text.match(numberPart)?.[0], quantity=prefix?toNum(prefix):null;
+  if(!quantity||/^\s*(?:-|to\b|or\b)/i.test(text.slice(prefix.length)))return {...parsed,quantity:null,needsReview:true};
+  let rest=text.slice(prefix.length).trim();
+  const metric=rest.match(/^\((\d+(?:\.\d+)?)\s*(g|kg|ml|mL|oz|ounce|ounces)\)/i);
+  let unit='',amount=quantity;
+  if(metric){const rule=unitValues[metric[2].toLowerCase()];unit=rule?.[0];amount=quantity*Number(metric[1])*(rule?.[1]||1);rest=rest.slice(metric[0].length).trim().replace(/^(?:can|cans|package|packages)\b\s*/i,'');}
+  else{
+    const measured=rest.match(measurement)?.[0]?.replace(/\.$/,'').toLowerCase();
+    if(measured){rest=rest.slice(rest.match(measurement)[0].length).trim();const rule=unitValues[measured];
+      if(rule){unit=rule[0];amount=quantity*rule[1];}else return {...parsed,quantity:null,needsReview:true};
+    }else{unit='each';}
+  }
+  const name=rest.replace(/^of\s+/i,'').split(/[,;(]/)[0].trim();
+  if(!name || /\bor\b/i.test(name))return {...parsed,quantity:null,needsReview:true};
+  return {raw,name,id:'custom',quantity:round(amount),unit,customName:name,pack:round(amount),price:'',needsReview:true};
+}
