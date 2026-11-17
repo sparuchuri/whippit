@@ -1,4 +1,4 @@
-import { ingredients, recipes, byId, tags } from './catalog.js';
+import { ingredients, recipes, byId, tags, isUserRecipe } from './catalog.js';
 
 export const dayNames = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 export const defaults = () => ({
@@ -84,8 +84,9 @@ export function varietyPenalty(assignments,config={}) {
   return penalty;
 }
 function score(assignments,basket,previous,config) {
+  const userRecipes = assignments.filter(slot => isUserRecipe(byId[slot.recipeId])).length;
   return basket.waste*.35 + basket.cents*.10 + varietyPenalty(assignments,config) +
-    assignments.filter(item=>previous.includes(item.recipeId)).length*250;
+    assignments.filter(item=>previous.includes(item.recipeId)).length*250 - userRecipes*800;
 }
 
 export function generate(config, locked={}, previous=[]) {

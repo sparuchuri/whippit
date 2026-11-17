@@ -69,6 +69,9 @@ function refreshCategories() {
 }
 refreshCategories();
 
+// Older saved recipes predate the explicit origin field.
+export const isUserRecipe = recipe => recipe.origin === 'user' || (recipe.origin == null && recipe.custom === true);
+
 export function registerRecipe(recipe, customIngredients=[]) {
   if (byId[recipe.id]) {
     if(recipe.custom && byId[recipe.id].custom) {Object.assign(byId[recipe.id],recipe); for(const item of customIngredients)ingredients[item.id]=item;}

@@ -1,6 +1,6 @@
 import {sourceRecipes} from './source-catalog.js';
 import {readLibrary,writeLibrary,readRecipeSources,writeRecipeSources} from './storage.js';
-import { byId, categories, ingredients, recipes, registerRecipe } from './catalog.js';
+import { byId, categories, ingredients, recipes, registerRecipe, isUserRecipe } from './catalog.js';
 import { amount, displayUnit, toDisplay, fromDisplay } from './planner.js';
 import { parseIngredient, pasteDraft, recipeMatches, suggestIngredient } from './recipe-tools.js';
 import { icon, dishMark } from './ui.js';
@@ -86,7 +86,8 @@ export function createRecipeLibrary({beforeSave,afterSave,onOpen,notify}) {
       (filter !== 'favorites' || favorites.has(item.id)) &&
       (filter !== 'mine' || item.custom) &&
       (!lunchOnly || item.use !== 'dinner') && (sourceById[item.id]?sourceMatch(item,query):recipeMatches(item,query))
-    ).sort((a,b) => Number(Boolean(b.rating))-Number(Boolean(a.rating)) ||
+    ).sort((a,b) => Number(isUserRecipe(b))-Number(isUserRecipe(a)) ||
+      Number(Boolean(b.rating))-Number(Boolean(a.rating)) ||
       a.name.localeCompare(b.name));
     const grid = root.querySelector('#recipe-grid');
     root.querySelector('#recipe-count').textContent = visible.length + (visible.length === 1 ? ' recipe' : ' recipes');
@@ -94,7 +95,7 @@ export function createRecipeLibrary({beforeSave,afterSave,onOpen,notify}) {
       <div class="recipe-card-top">${dishMark(item)}${favoriteButton(item)}</div>
       <span class="tag">${escapeHtml(item.cuisine || (sourceById[item.id]?'Publisher recipe':'Personal recipe'))}</span>
       <h3><button type="button" data-open-recipe="${escapeHtml(item.id)}" class="meal-title">${escapeHtml(item.name)}</button></h3>
-      <p class="muted">${item.minutes || '—'} min · ${useLabel(item)}</p>${item.rating?`<p class="publisher-rating">★ ${item.rating.toFixed(1)} <span>(${item.ratingCount.toLocaleString()} ratings${item.secondaryMetadata?' · via secondary source':''})</span></p>`:''}<p class="recipe-source">${escapeHtml(sourceDescription(item))}${sourceById[item.id]?' · Source recipe':''}</p>
+      <p class="muted">${item.minutes || '—'} min · ${useLabel(item)}</p>${item.rating?`<p class="publisher-rating">★ ${item.rating.toFixed(1)} <span>(${item.ratingCount.toLocaleString()} ratings${item.secondaryMetadata?' · via secondary source':''})</span></p>`:''}<p class="recipe-source">${escapeHtml(sourceDescription(item))}${sourceById[item.id]?' · Source recipe':isUserRecipe(item)&&item.source?' · Added by you':''}</p>
       </article>`).join('') :
       '<div class="panel empty"><p>No recipes match. Try a different search or add one of your own.</p></div>';
     if(visible.length>visibleLimit)grid.insertAdjacentHTML('beforeend',`<button class="load-more" type="button" id="more-recipes">Show more recipes (${visible.length-visibleLimit} remaining)</button>`);
@@ -159,7 +160,7 @@ export function createRecipeLibrary({beforeSave,afterSave,onOpen,notify}) {
     if(!item)return;
     const saved=recipes.find(recipe=>recipe.source?.url===item.url);
     frame(escapeHtml(item.name),`<p class="muted">@${escapeHtml(item.creator)}</p>
-      <p>Review the original video for any missing ingredients, servings or instructions.</p>
+      <p>Your import · Review the original video for any missing ingredients, servings or instructions.</p>
       <div class="actions"><a class="button-link" href="${escapeHtml(safeExternalUrl(item.url))}" target="_blank" rel="noopener noreferrer">Open TikTok video ↗</a>
       <button class="primary" id="collection-review">${saved?'Open saved recipe':'Review for planner'}</button></div>
       ${item.items.length?`<h3>Ingredients to review</h3><ul class="dialog-list">${item.items.map(line=>`<li>${escapeHtml(line)}</li>`).join('')}</ul>`:''}`);
@@ -193,7 +194,7 @@ export function createRecipeLibrary({beforeSave,afterSave,onOpen,notify}) {
           const id='tiktok-'+match[2];
           if(existing.has(id))continue;
           const lines=value=>Array.isArray(value)?value.filter(line=>typeof line==='string').slice(0,40).map(line=>line.slice(0,400)):[];
-          sources.push({id,url:row.url,creator:match[1],name:row.name.trim().slice(0,100),
+          sources.push({id,origin:'user',url:row.url,creator:match[1],name:row.name.trim().slice(0,100),
             items:lines(row.items),steps:lines(row.steps),
             servings:Number.isInteger(row.servings)&&row.servings>=1&&row.servings<=48?row.servings:null,
             minutes:Number.isInteger(row.minutes)&&row.minutes>=1&&row.minutes<=720?row.minutes:null});
@@ -384,7 +385,7 @@ export function createRecipeLibrary({beforeSave,afterSave,onOpen,notify}) {
       const styles = [...new Set($('#draft-tags').value.split(',')
         .map(value=>value.trim()).filter(Boolean).map(value=>categories.find(tag=>tag.toLowerCase()===value.toLowerCase()) ||
         value[0].toUpperCase()+value.slice(1)))].slice(0,8);
-      const recipe={id:'recipe_'+crypto.randomUUID(),name,steps,parts,ingredientNotes,custom:true,
+      const recipe={id:'recipe_'+crypto.randomUUID(),name,steps,parts,ingredientNotes,custom:true,origin:'user',
         servings:Number($('#draft-yield').value),minutes:Number($('#draft-time').value),
         cuisine:$('#draft-cuisine').value.trim() || 'Personal recipe',protein,use:$('#draft-use').value,styles,
         source:draft.source};
