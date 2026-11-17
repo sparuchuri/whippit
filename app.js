@@ -244,7 +244,7 @@ function showRecipeDetails(item,servings,forLunch=false) {
 }
 function showSwaps(id) {
   const plan = current, currentBasket = grocery(plan.assignments,shoppingConfig(plan.config));
-  const alternatives = swaps(plan.assignments,id,shoppingConfig(plan.config));
+  const alternatives = swaps(plan.assignments,id,shoppingConfig(plan.config),nearbyRecipes());
   showDialog('Swap this meal',alternatives.length
     ? '<label class="search-label">Find a swap <input id="swap-search" type="search" placeholder="Recipe or ingredient"></label><div id="swap-options"></div>'
     : '<p>There are no eligible swaps with these preferences.</p>');
@@ -269,6 +269,12 @@ function showSwaps(id) {
     render();
     $('#save')?.focus();
   };
+}
+function nearbyRecipes() {
+  return [-2,-1,1,2].map(offset=>({
+    distance:Math.abs(offset),
+    recipeIds:(weeks[shiftWeek(week,offset)]?.assignments || []).map(item=>item.recipeId),
+  })).filter(entry=>entry.recipeIds.length);
 }
 function startPlan(config,locks,previous) {
   let worker;
@@ -312,8 +318,7 @@ form.addEventListener('submit',async event => {
   const missingLocks = Object.keys(current?.locks || {}).filter(id => !ids.has(id));
   if (missingLocks.length) { announce('Unlock meals you want to remove before changing their dates.'); return; }
   const locks = current?.locks || {};
-  const previous = [shiftWeek(week,-1),shiftWeek(week,-2)].flatMap(key => (weeks[key]?.assignments || []).map(item => item.recipeId));
-  const job = startPlan(shoppingConfig(config),locks,previous);
+  const job = startPlan(shoppingConfig(config),locks,nearbyRecipes());
   generation = job;
   const submit = form.querySelector('[type=submit]');
   submit.disabled = true;

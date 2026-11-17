@@ -147,3 +147,36 @@ test('a saved recipe that shares perishables with the week gets extra swap prior
     }
   }
 });
+
+test('rotate red-sauce pasta and dal by dish, including similarly named imports',async()=>{
+  const {registerRecipe} = await import('./catalog.js');
+  const saved=[
+    {...byId['tomato-chickpea'],id:'recipe_test_weeknight_bolognese',name:'Creamy Weeknight Bolognese',origin:'user'},
+    {...byId['sw-moong'],id:'recipe_test_spiced_lentils',name:'Spiced Lentils',origin:'user'},
+  ];
+  saved.forEach(recipe=>registerRecipe(recipe));
+  try {
+    const config={...defaults(),dinnerDays:[0,1],budget:100};
+    const ids=plan=>plan.options[0].assignments.map(slot=>slot.recipeId);
+    assert.ok(ids(generate(config)).some(id=>saved.some(recipe=>recipe.id===id)));
+    const anchors=['turkey-pasta','bb-coconut-lentils'];
+    const recent=[{distance:1,recipeIds:anchors}];
+    assert.ok(ids(generate(config,{},recent)).every(id=>!saved.some(recipe=>recipe.id===id) && !anchors.includes(id)));
+    assert.deepEqual(ids(generate(config,{d0:anchors[0],d1:anchors[1]},recent)),anchors);
+    const extended={...config,dinnerDays:[0,1,2,3]};
+    assert.ok(ids(generate(extended,{d0:anchors[0],d1:anchors[1]})).every(id=>!saved.some(recipe=>recipe.id===id)));
+    const choices=history=>swaps([{id:'d0',day:0,type:'dinner',servings:2,recipeId:'bean-tacos'}],'d0',config,history);
+    const rank=(options,id)=>options.find(option=>option.recipeId===id).rank;
+    const sameWeek=choices([]);
+    const afterPasta=choices([{distance:1,recipeIds:[anchors[0]]}]);
+    assert.ok(rank(afterPasta,saved[0].id)-rank(sameWeek,saved[0].id) >
+      rank(afterPasta,'broccoli-pasta')-rank(sameWeek,'broccoli-pasta'));
+    const twoWeeks=choices([{distance:2,recipeIds:[anchors[0]]}]);
+    assert.ok(rank(afterPasta,saved[0].id)>rank(twoWeeks,saved[0].id));
+  } finally {
+    for (const recipe of saved) {
+      recipes.splice(recipes.indexOf(recipe),1);
+      delete byId[recipe.id];
+    }
+  }
+});

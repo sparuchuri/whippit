@@ -75,6 +75,94 @@ const themeMet = (assignments, theme) => !theme || assignments.some(slot => matc
 
 const stapleIds=new Set(['oil','salt','blackPepper','rice','garlic','onion','ginger','sugar']);
 const flavorIds=['coconut','curry','gochujang','pesto','peanut','miso','tomato'];
+// Distinguish the dish from the grocery basket. A tomato sauce can be shared
+// across dishes; two different recipes for red-sauce pasta still eat similarly.
+function describeDish(recipe) {
+  const normalize = value => value.toLowerCase().normalize('NFKD').replace(/\p{Diacritic}/gu,'');
+  const title = normalize(recipe.name);
+  const names = normalize(Object.keys(recipe.parts).map(id=>ingredients[id]?.name || id).join(' '));
+  const isPasta = /\b(?:pasta|spaghetti|rigatoni|penne|linguine|fettuccine|lasagna|gnocchi|orzo|mac(?:aroni)?)\b/;
+  const redSauce = /\b(?:bolognese|marinara|arrabbiata|pomodoro|puttanesca|red sauce)\b/;
+  if (/\b(?:dal|daal|dahl|dhal)\b/.test(title) ||
+      (/indian/i.test(recipe.cuisine) && /\blentils?\b/.test(title) && /\b(?:lentils?|moong)\b/.test(names) &&
+       /\b(?:curry powder|turmeric|garam masala)\b/.test(names) && !/\b(?:salad|patty|burger)\b/.test(title))) {
+    return {family:'dal',format:'lentil stew'};
+  }
+  if (isPasta.test(title) || (redSauce.test(title) && isPasta.test(names)) ||
+      (/italian/i.test(recipe.cuisine) && isPasta.test(names) && !/\b(?:soup|stew)\b/.test(title))) {
+    const format='pasta';
+    if (redSauce.test(title)) return {format,family:'red-sauce pasta'};
+    if (/\bpesto\b/.test(title) || /\bbasil pesto\b/.test(names)) return {format,family:'pesto pasta'};
+    if (!/\b(?:salad|salsa)\b/.test(title) && (
+      /\b(?:tomato|tomatoes|ratatouille)\b/.test(title) ||
+      /\b(?:crushed tomatoes|canned diced tomatoes|passata|tomato sauce)\b/.test(names)
+    )) return {format,family:'red-sauce pasta'};
+    if (/\b(?:alfredo|cream(?:y)?|mac and cheese)\b/.test(title)) return {format,family:'creamy pasta'};
+    return {format};
+  }
+  const format = title.match(/\b(tacos?|burritos?|burgers?|salads?|curr(?:y|ies)|soups?|sandwich(?:es)?|noodles?|pizzas?|chilis?|stir[ -]fr(?:y|ies)|bowls?)\b/)?.[1];
+  return {format:format?.replace(/ies$/,'y').replace(/ches$/,'ch').replace(/s$/,'')};
+}
+
+function primaryProtein(recipe) {
+  const protein=String(recipe.protein ?? '').toLowerCase();
+  if (protein!=='seafood') return /^(?:chicken|turkey|beef|pork|lamb|tofu|eggs|lentils|beans|chickpeas|paneer)$/.test(protein) ? protein : '';
+  const fish = Object.keys(recipe.parts).map(id=>ingredients[id]?.name || '').join(' ').toLowerCase();
+  return fish.match(/\b(?:salmon|tuna|cod|shrimp|tilapia|trout|sardines?)\b/)?.[0] || '';
+}
+
+function createVarietyContext(recent=[]) {
+  const dishes = new Map(recipes.map(recipe=>[recipe.id,{...describeDish(recipe),protein:primaryProtein(recipe)}]));
+  const history = recent.length && typeof recent[0]==='string' ? [{distance:1,recipeIds:recent}] : recent;
+  const weeks = history.map(({distance,recipeIds})=>{
+    const ids = new Set(recipeIds);
+    const descriptors = [...ids].map(id=>dishes.get(id)).filter(Boolean);
+    const proteins = new Map();
+    for (const {protein} of descriptors) {
+      if (protein) proteins.set(protein,(proteins.get(protein) || 0)+1);
+    }
+    return {distance,ids,proteins,families:new Set(descriptors.map(dish=>dish.family).filter(Boolean)),
+      formats:new Set(descriptors.map(dish=>dish.format).filter(Boolean))};
+  });
+  const repeatCosts = new Map();
+  for (const [id,{family,format,protein}] of dishes) {
+    let cost=0;
+    for (const week of weeks) {
+      const adjacent=week.distance===1;
+      if (week.ids.has(id)) cost+=adjacent?5000:2100;
+      else if (family && week.families.has(family)) cost+=adjacent?4200:1500;
+      else if (format && week.formats.has(format)) cost+=adjacent?550:190;
+      const previousCount=week.proteins.get(protein) || 0;
+      cost+=Math.min(3,Math.max(0,previousCount-1))*(adjacent?280:100);
+    }
+    repeatCosts.set(id,cost);
+  }
+  return {dishes,repeatCosts};
+}
+
+function dishRepeatPenalty(assignments, {dishes,repeatCosts}) {
+  let cost=0;
+  const families=new Map(), formats=new Map(), proteins=new Map();
+  for (const {recipeId} of assignments) {
+    const {family,format,protein}=dishes.get(recipeId) || {};
+    cost+=repeatCosts.get(recipeId) || 0;
+    if (family) {
+      cost+=(families.get(family) || 0)*4200;
+      families.set(family,(families.get(family) || 0)+1);
+    }
+    if (format) {
+      cost+=(formats.get(format) || 0)*550;
+      formats.set(format,(formats.get(format) || 0)+1);
+    }
+    if (protein) {
+      const count=proteins.get(protein) || 0;
+      if (count) cost+=350+Math.max(0,count-1)*1800;
+      proteins.set(protein,count+1);
+    }
+  }
+  return cost;
+}
+
 export function varietyPenalty(assignments,config={}) {
   const meals=assignments.filter(s=>s.type==='dinner').sort((a,b)=>a.day-b.day);
   let penalty=0;
@@ -122,12 +210,12 @@ function userRecipeCredit(assignments, config) {
   return credit;
 }
 
-function score(assignments,basket,previous,config) {
+function score(assignments,basket,variety,config) {
   return basket.waste*.35 + basket.cents*.10 + varietyPenalty(assignments,config) +
-    assignments.filter(item=>previous.includes(item.recipeId)).length*250 - userRecipeCredit(assignments,config);
+    dishRepeatPenalty(assignments,variety) - userRecipeCredit(assignments,config);
 }
 
-export function generate(config, locked={}, previous=[]) {
+export function generate(config, locked={}, recent=[]) {
   const slots = slotsFor(config);
   if (!slots.length) return {error:'Select at least one dinner or lunch day.'};
   if (config.theme && config.excluded.includes(config.theme)) return {error:'Your requested theme is also excluded.'};
@@ -140,6 +228,7 @@ export function generate(config, locked={}, previous=[]) {
     return {error:'No eligible recipe matches that theme for these meal slots.'};
   }
 
+  const variety=createVarietyContext(recent);
   function search(width) {
     let beam = [{assignments:[],rank:0,cents:0,key:''}];
     for (let index=0; index<slots.length; index++) {
@@ -151,7 +240,7 @@ export function generate(config, locked={}, previous=[]) {
           const themed = themeMet(assignments,config.theme);
           if (index === slots.length-1 && !themed) continue;
           const basket = grocery(assignments,config,false);
-          next.push({assignments,basket,themed,cents:basket.cents,rank:score(assignments,basket,previous,config),
+          next.push({assignments,basket,themed,cents:basket.cents,rank:score(assignments,basket,variety,config),
             key:state.key+':'+item.id});
         }
       }
@@ -180,16 +269,17 @@ export function generate(config, locked={}, previous=[]) {
   return options.length ? {options} : {error:'Could not fill this week with distinct eligible meals. Try fewer slots or fewer exclusions.'};
 }
 
-export function swaps(assignments, id, config) {
+export function swaps(assignments, id, config, recent=[]) {
   const slot = assignments.find(item => item.id === id);
   if (!slot) return [];
+  const variety=createVarietyContext(recent);
   return recipes.filter(item => eligibility(item,slot,config) &&
     !assignments.some(other => other.recipeId === item.id)
   ).flatMap(item => {
     const next = assignments.map(other => other.id === id ? {...other,recipeId:item.id} : other);
     if (!themeMet(next,config.theme)) return [];
     const basket = grocery(next,config);
-    return [{recipeId:item.id,assignments:next,basket,rank:score(next,basket,[],config)}];
+    return [{recipeId:item.id,assignments:next,basket,rank:score(next,basket,variety,config)}];
   }).sort((a,b) => (a.basket.cents > config.budget*100)-(b.basket.cents > config.budget*100) ||
     a.rank-b.rank || a.recipeId.localeCompare(b.recipeId));
 }
