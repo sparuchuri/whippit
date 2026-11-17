@@ -1,4 +1,4 @@
-const cacheName = 'whippit-shell-v13';
+const cacheName = 'whippit-shell-v14';
 const shell = [
   './','./index.html','./style.css','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png',
   './app.js','./ui.js','./catalog.js','./curated.js','./planner.js','./storage.js',

@@ -10,12 +10,12 @@ const port = Number(process.env.PORT || 4173);
 // Local QA fixture only; this development server is never bundled into the Worker.
 const previewTest=existsSync(new URL('.whippit-preview-test',import.meta.url));
 const previewDB=previewTest?sqliteD1():null;
-if(previewDB)previewDB.db.exec(await readFile(new URL('drizzle/0000_accounts.sql',import.meta.url),'utf8'));
+if(previewDB)for(const name of ['0000_accounts','0001_households'])previewDB.db.exec(await readFile(new URL('drizzle/'+name+'.sql',import.meta.url),'utf8'));
 
 createServer(async (request,response) => {
   const url = new URL(request.url,'http://'+request.headers.host);
   if(url.pathname==='/__qa'){response.writeHead(200,{'Content-Type':'text/html'}).end('<title>WhippIt responsive QA</title><style>body{margin:0;display:flex;gap:20px;background:#ddd}iframe{height:900px;border:0}</style><iframe title="390 pixel phone" src="/" width="390"></iframe><iframe title="320 pixel phone" src="/" width="320"></iframe>');return;}
-  if (['/api/session','/api/state','/api/sync','/api/recipe-import'].includes(url.pathname)) {
+  if (['/api/session','/api/state','/api/sync','/api/household','/api/recipe-import'].includes(url.pathname)) {
     const chunks = [];
     let count = 0;
     for await (const chunk of request) {

@@ -85,6 +85,11 @@ export function withPantryProfile(config, profile) {
       if (stocked.has(item.id) || stocked.has(canonical)) pantry[item.id] = 'enough';
     }
   }
+  const oilIds=['oil','peanutOil'];
+  if (!config.excludedIngredients?.some(id=>oilIds.includes(id)) &&
+      oilIds.some(id=>typeof config.pantry[id]==='number')) {
+    for (const id of oilIds) delete pantry[id];
+  }
   return {...config,pantry:{...pantry,...config.pantry}};
 }
 
@@ -100,7 +105,7 @@ export function createPantryProfile(onSave) {
     const canonicalId = item => lookup.get(normalize(item.name)) || item.id;
     const selected = new Set(initial.items.map(id=>Object.hasOwn(ingredients,id) ? canonicalId(ingredients[id]) : id));
     const extras = new Map(initial.unmatched.map(name=>[normalize(name),name]));
-    const available = Object.values(ingredients).filter(item=>eligible(item)&&canonicalId(item)===item.id)
+    const available = Object.values(ingredients).filter(item=>eligible(item)&&canonicalId(item)===item.id&&item.id!=='peanutOil')
       .sort((a,b)=>a.name.localeCompare(b.name));
     // An item entered before it existed in the catalog can match a later imported recipe.
     for (const [key,label] of extras) {
@@ -138,7 +143,7 @@ export function createPantryProfile(onSave) {
       const query = normalize(dialog.querySelector('#filter-pantry').value);
       const groups = new Map(['Seasonings','Sauces, oils & condiments','Baking & sweeteners','Dry goods & canned foods'].map(label=>[label,[]]));
       for (const item of available) {
-        const labels = [item.name,...(aliases[item.id] || []),...(item.aliases || [])];
+        const labels = [item.name,...(aliases[item.id] || []),...(item.aliases || []),...(item.id==='oil'?['peanut oil','neutral cooking oil']:[])];
         if (query && !labels.some(label=>normalize(label).includes(query))) continue;
         const group = item.pantryGroup || (seasonings.has(item.id) ? 'Seasonings' :
           condiments.has(item.id) ? 'Sauces, oils & condiments' : ['sugar','cornstarch'].includes(item.id) ?
@@ -146,7 +151,7 @@ export function createPantryProfile(onSave) {
         groups.get(group).push(item);
       }
       options.innerHTML = [...groups].filter(([,items])=>items.length).map(([label,items])=>`<fieldset><legend>${esc(label)}</legend><div class="checks pantry-checks">${items.map(item=>
-        `<label><input type="checkbox" data-ingredient="${esc(item.id)}" ${selected.has(item.id)?'checked':''}>${esc(item.name)}</label>`).join('')}</div></fieldset>`).join('') +
+        `<label><input type="checkbox" data-ingredient="${esc(item.id)}" ${selected.has(item.id)||(item.id==='oil'&&selected.has('peanutOil'))?'checked':''}>${esc(item.id==='oil'?'Neutral cooking oil (vegetable, canola or peanut)':item.name)}</label>`).join('')}</div></fieldset>`).join('') +
         (extras.size ? `<fieldset><legend>Other items you listed</legend><p class="muted">Saved here for reference until matched to a Whippit ingredient.</p><div class="checks pantry-checks">${[...extras].map(([key,label])=>
           `<label><input type="checkbox" data-extra="${esc(key)}" checked>${esc(label)}</label>`).join('')}</div></fieldset>` : '');
     }
@@ -165,7 +170,10 @@ export function createPantryProfile(onSave) {
       const {checked,dataset} = event.target;
       if (dataset.ingredient) {
         if (checked) selected.add(dataset.ingredient);
-        else selected.delete(dataset.ingredient);
+        else {
+          selected.delete(dataset.ingredient);
+          if(dataset.ingredient==='oil')selected.delete('peanutOil');
+        }
       }
       if (dataset.extra && !checked) extras.delete(dataset.extra);
       if (dataset.extra && checked) extras.set(dataset.extra,event.target.parentElement.textContent.trim());

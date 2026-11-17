@@ -3,7 +3,7 @@ const legacyWeeks='whippit:weeks:v1',legacyLibrary='whippit:recipe-library:v1';
 const empty=()=>({documents:{},pending:{},conflicts:{}});
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const load=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key))??fallback;}catch{return fallback;}};
-let state=empty(),user=null,accountId='guest',busy=false,timer,phase='connecting',message='',storageOk=true,accountChanged=false;
+let state=empty(),user=null,householdId=null,accountId='guest',busy=false,timer,phase='connecting',message='',storageOk=true,accountChanged=false;
 const listeners=new Set();
 function emit(remote=false){for(const fn of listeners)fn({...syncStatus(),remote});}
 function save(){try{localStorage.setItem(prefix+accountId,JSON.stringify(state));storageOk=true;return true;}catch{storageOk=false;message='Device storage is full. Keep this page open until sync completes.';emit();return false;}}
@@ -68,6 +68,30 @@ async function api(path,options={}){
  const response=await fetch(path,{...options,cache:'no-store',signal:AbortSignal.timeout(10000)});
  const data=await response.json();if(!response.ok){const error=new Error(data.error || 'Sync is unavailable.');error.status=response.status;error.code=data.code;throw error;}return data;
 }
+export const readHousehold=()=>api('/api/household');
+export async function changeHousehold(action,details={}) {
+ if(action==='leave' && Object.keys(state.pending).length) {
+   await syncNow();
+   if(Object.keys(state.pending).length)throw new Error('Sync or resolve your pending household edits before leaving.');
+ }
+ const result=await api('/api/household',{method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({...details,action,expectedUserId:user?.id})});
+ if(action==='accept'||action==='leave') {
+   if(householdId)forgetHouseholdCache();
+   location.reload();
+ }
+ return result;
+}
+function forgetHouseholdCache(){
+ try {
+   localStorage.removeItem(prefix+accountId);
+   localStorage.setItem('whippit:last-account',JSON.stringify({...user,householdId:null}));
+ }catch{}
+}
+function checkScope(response){
+ if(response.userId!==user.id)throw Object.assign(new Error('Account changed'),{code:'ACCOUNT_CHANGED'});
+ if((response.householdId??null)!==householdId)throw Object.assign(new Error('Household changed'),{code:'HOUSEHOLD_CHANGED'});
+}
 function acceptRemote(doc){
  const pending=state.pending[doc.key];
  if(!pending){state.documents[doc.key]=doc;return;}
@@ -79,14 +103,14 @@ export async function syncNow(){
  busy=true;phase='syncing';message='';emit();
  try{
    // Pull first so independent documents from other devices are visible before writing.
-   const remote=await api('/api/state');
-   if(remote.userId!==user.id){const error=new Error('Account changed');error.code='ACCOUNT_CHANGED';throw error;}
+   const remote=await api('/api/state',{headers:householdId?{'x-whippit-household':householdId}:{}});
+   checkScope(remote);
    remote.documents.forEach(acceptRemote);save();emit(true);
    for(let batch=0;batch<25;batch++){
      const changes=Object.values(state.pending).filter(c=>!state.conflicts[c.key]).slice(0,25).map(c=>structuredClone(c));
      if(!changes.length)break;
-     const result=await api('/api/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({expectedUserId:user.id,changes})});
-     if(result.userId!==user.id){const error=new Error('Account changed');error.code='ACCOUNT_CHANGED';throw error;}
+     const result=await api('/api/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({expectedUserId:user.id,expectedHouseholdId:householdId,changes})});
+     checkScope(result);
      for(const doc of result.accepted){
        const sent=changes.find(c=>c.key===doc.key),pending=state.pending[doc.key];
        if(pending&& !same(pending.value,sent.value)){
@@ -98,19 +122,33 @@ export async function syncNow(){
      save();
    }
    phase=Object.keys(state.conflicts).length?'conflict':Object.keys(state.pending).length?'pending':'synced';
- }catch(error){if(error.code==='ACCOUNT_CHANGED'){accountChanged=true;clearTimeout(timer);phase='account-changed';message='Your account changed. Reload to continue. Unsynced changes are kept for the original account.';}else{phase=error.status===401?'signed-out':'offline';message=error.status===401?'Sign in again to continue syncing.':navigator.onLine?'Could not reach account sync. Changes are kept on this device.':'You’re offline. Changes will sync when you reconnect.';}}
- finally{busy=false;save();emit(true);if(phase==='pending')schedule();}
+ }catch(error){if(error.code==='HOUSEHOLD_CHANGED'){
+   accountChanged=true;clearTimeout(timer);
+   if(householdId)forgetHouseholdCache();
+   state=empty();phase='household-changed';message='Your household changed. Reload to switch your workspace.';
+   if(typeof location!=='undefined')location.reload();
+ }else if(error.code==='ACCOUNT_CHANGED'){accountChanged=true;clearTimeout(timer);phase='account-changed';message='Your account changed. Reload to continue. Unsynced changes are kept for the original account.';}else{phase=error.status===401?'signed-out':'offline';message=error.status===401?'Sign in again to continue syncing.':navigator.onLine?'Could not reach account sync. Changes are kept on this device.':'You’re offline. Changes will sync when you reconnect.';}}
+ finally{busy=false;if(phase!=='household-changed')save();emit(true);if(phase==='pending')schedule();}
 }
 export async function initializeStorage(){
  try{
    const session=await api('/api/session');user=session.user;
+   householdId=session.householdId || null;
+   const last=load('whippit:last-account',null);
+   if (last?.id===user?.id && last?.householdId && last.householdId!==householdId) {
+     try{localStorage.removeItem(prefix+last.id+':household:'+last.householdId);}catch{}
+   }
    accountId=user?.id || 'guest';
+   if(householdId)accountId+=':household:'+householdId;
    state=load(prefix+accountId,empty());
    if(!state.documents||!state.pending||!state.conflicts)state=empty();
-   if(user){localStorage.setItem('whippit:last-account',JSON.stringify(user));phase='syncing';await syncNow();}
+   if(user){localStorage.setItem('whippit:last-account',JSON.stringify({...user,householdId}));phase='syncing';await syncNow();}
    else{localStorage.removeItem('whippit:last-account');phase='local';}
  }catch{
-   user=load('whippit:last-account',null);accountId=user?.id || 'guest';state=load(prefix+accountId,empty());
+   user=load('whippit:last-account',null);householdId=user?.householdId || null;
+   accountId=user?.id || 'guest';
+   if(householdId)accountId+=':household:'+householdId;
+   state=load(prefix+accountId,empty());
    if(!state.documents||!state.pending||!state.conflicts)state=empty();phase='offline';message='You’re viewing the copy saved on this device.';
  }
  if(!user&& !Object.keys(state.documents).length && legacySummary())importDeviceData();

@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 import {handleAccountApi} from './account-api.js';
 import {sqliteD1} from './sqlite-adapter.mjs';
 const source=readFileSync(new URL('storage.js',import.meta.url),'utf8').replace(/export /g,'')+'\npublicApi={initializeStorage,writeWeeks,readWeeks,writeLibrary,readLibrary,writePreferences,readPreferences,syncNow,syncStatus,conflictDetails,resolveConflict};';
-const database=()=>{const DB=sqliteD1();DB.db.exec(readFileSync(new URL('drizzle/0000_accounts.sql',import.meta.url),'utf8'));return{DB};};
+const database=()=>{const DB=sqliteD1();for(const name of ['0000_accounts','0001_households'])DB.db.exec(readFileSync(new URL('drizzle/'+name+'.sql',import.meta.url),'utf8'));return{DB};};
 function client(db,user,cache=new Map()){
  const navigator={onLine:true};const identity={user,beforeSync:null};const context={publicApi:null,structuredClone,AbortSignal,URL,console,navigator,confirm:()=>true,
  localStorage:{getItem:k=>cache.get(k)??null,setItem:(k,v)=>cache.set(k,v),removeItem:k=>cache.delete(k)},

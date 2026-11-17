@@ -36,7 +36,7 @@ async function build() {
 export default {
   async fetch(request, env) {
     const pathname = new URL(request.url).pathname;
-    if (['/api/session','/api/state','/api/sync'].includes(pathname)) { try { return await handleAccountApi(request,env); } catch { return new Response(JSON.stringify({error:'Account sync is temporarily unavailable. Your device copy is safe.'}),{status:503,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}}); } }\n    if (pathname === '/api/recipe-import') return handleRecipeImport(request);
+    if (['/api/session','/api/state','/api/sync','/api/household'].includes(pathname)) { try { return await handleAccountApi(request,env); } catch { return new Response(JSON.stringify({error:'Account sync is temporarily unavailable. Your device copy is safe.'}),{status:503,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}}); } }\n    if (pathname === '/api/recipe-import') return handleRecipeImport(request);
     const file = pathname === '/' ? 'index.html' : pathname.slice(1);
     const entry = Object.hasOwn(assets,file) ? assets[file] : null;
     if (!entry) return new Response('Not found',{status:404});

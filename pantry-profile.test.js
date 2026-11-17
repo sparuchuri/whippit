@@ -41,3 +41,13 @@ test('expanded staples match recipe imports and equivalent older custom grocery 
     delete ingredients[id];
   }
 });
+
+test('neutral oil substitutions combine shopping needs and respect explicit exclusions',()=>{
+  const source='lemon-chicken';
+  const cfg=defaults();
+  assert.deepEqual(parsePantryList('canola oil, peanut oil, toasted sesame oil').items,['oil','peanutOil','sesameOil']);
+  const slate=[{recipeId:source,servings:2}];
+  const stocked=withPantryProfile(cfg,{items:['peanutOil'],unmatched:[]});
+  assert.equal(grocery(slate,stocked).lines.find(item=>item.id==='oil').packs,0);
+  assert.equal(grocery(slate,{...stocked,excludedIngredients:['peanutOil']}).lines.find(item=>item.id==='oil').packs,1);
+});

@@ -32,20 +32,28 @@ export function eligibility(recipe, slot, config) {
 }
 
 export function grocery(assignments, config, details=true) {
+  const combineNeutralOils = !config.excludedIngredients?.some(id=>id==='oil'||id==='peanutOil');
+  const groceryId = id => combineNeutralOils && id==='peanutOil' ? 'oil' : id;
   const needs = {};
   for (const {recipeId,servings} of assignments) {
     const recipe = byId[recipeId];
-    for (const [id,quantity] of Object.entries(recipe.parts)) {
+    for (const [ingredientId,quantity] of Object.entries(recipe.parts)) {
+      const id=groceryId(ingredientId);
       needs[id] = (needs[id] || 0) + quantity * servings / recipe.servings;
     }
   }
+  const pantry = {};
+  for (const [ingredientId,amount] of Object.entries(config.pantry)) {
+    const id=groceryId(ingredientId);
+    pantry[id]=pantry[id]==='enough' || amount==='enough' ? 'enough' : (pantry[id]||0)+amount;
+  }
   const lines = [];
   let cents = 0, waste = 0;
-  for (const id of new Set([...Object.keys(needs),...Object.keys(config.pantry)])) {
+  for (const id of new Set([...Object.keys(needs),...Object.keys(pantry)])) {
     const item = ingredients[id];
     if (!item) continue;
     const need = needs[id] || 0;
-    const onHand = config.pantry[id] === 'enough' ? need : (config.pantry[id] || 0);
+    const onHand = pantry[id] === 'enough' ? need : (pantry[id] || 0);
     const net = Math.max(0,need-onHand);
     const price = config.prices[id] ?? item.cents;
     const packs = Math.max(0, Math.ceil(net/item.pack - 1e-10));
@@ -54,7 +62,7 @@ export function grocery(assignments, config, details=true) {
     cents += cost;
     waste += remaining/item.pack*price*item.risk;
     if (details && (need || remaining)) lines.push({
-      ...item,unpriced:item.unpriced && config.prices[id]==null,need,packs,cost,remaining,usedPantry:Math.min(onHand,need),
+      ...item,...(combineNeutralOils&&id==='oil'?{name:'Neutral cooking oil'}:{}),unpriced:item.unpriced && config.prices[id]==null,need,packs,cost,remaining,usedPantry:Math.min(onHand,need),
       signature:[id,item.pack,packs].join(':')
     });
   }
