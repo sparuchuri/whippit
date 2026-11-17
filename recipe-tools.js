@@ -15,6 +15,12 @@ const aliases = {
   ginger:['ginger','ginger root'], salt:['kosher salt','sea salt','table salt'],
   blackPepper:['black pepper','ground pepper','freshly ground black pepper'],
   oil:['vegetable oil','olive oil','avocado oil','neutral oil','canola oil','extra virgin olive oil','oil'],
+  sesameOil:['sesame oil'],
+  sugar:['white sugar','granulated sugar'],
+  riceVinegar:['rice wine vinegar'],
+  chiliFlake:['chili flakes','chilli flakes','red pepper flakes'],
+  paprika:['smoked paprika'],
+  cumin:['cumin powder'],
   soy:['light soy sauce','low sodium soy sauce','reduced sodium soy sauce'],
   yogurt:['greek yogurt','plain yogurt'], moong:['moong dal','yellow lentils'],
   redLentil:['red lentils','dry red lentils'], udon:['udon','udon noodles'],
@@ -62,7 +68,7 @@ export function parseIngredient(raw) {
   const short = name.split(/[,;(]/,1)[0].replace(/^(of |boneless skinless |skinless boneless )/i,'').trim();
   const nameKey = keyName(short);
   const known = Object.values(ingredients).find(item =>
-    [item.name,item.id,...(aliases[item.id] || [])].some(alias => keyName(alias) === nameKey));
+    [item.name,item.id,...(aliases[item.id] || []),...(item.aliases || [])].some(alias => keyName(alias) === nameKey));
   const readQuantity = prefix ? toNum(prefix) : null;
   const explicitRange = /^\s*(?:-|to\b)/i.test(value.slice(prefix?.length ?? 0));
   const quantity = known && readQuantity > 0 && !explicitRange
@@ -80,7 +86,8 @@ function canonicalQuantity(item,value,measured) {
   if (!rule) return null;
   if (rule[0] === item.unit) return round(value*rule[1]);
   if (rule[0] !== 'mL' || item.unit !== 'g') return null;
-  if (gramsPerTsp[item.id] != null) return round(value*rule[1]/4.928917*gramsPerTsp[item.id]);
+  const density = item.gramsPerTsp ?? gramsPerTsp[item.id];
+  if (density != null) return round(value*rule[1]/4.928917*density);
   if (gramsPerCup[item.id] != null) return round(value*rule[1]/236.588*gramsPerCup[item.id]);
   return null;
 }

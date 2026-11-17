@@ -1,4 +1,4 @@
-import { extraIngredients, curatedRecipes } from './curated.js';
+import { extraIngredients, extraPantryIngredients, curatedRecipes } from './curated.js';
 
 const entries = [
   ['chicken','Chicken breast','Meat & fish',454,'g',649,1],
@@ -32,6 +32,9 @@ const entries = [
   ['paprika','Smoked paprika','Pantry',45,'g',279,0],
 ];
 export const ingredients = Object.fromEntries([...entries,...extraIngredients].map(([id,name,aisle,pack,unit,cents,risk]) => [id,{id,name,aisle,pack,unit,cents,risk}]));
+for (const [id,name,pack,unit,cents,pantryGroup,aliases,gramsPerTsp] of extraPantryIngredients) {
+  ingredients[id] = {id,name,aisle:'Pantry',pack,unit,cents,risk:0,pantryGroup,aliases,gramsPerTsp};
+}
 export const staples = ['oil','salt','cumin','curry','soy','paprika'];
 const recipe = (id,name,cuisine,protein,minutes,use,parts,steps,styles=[]) => ({
   id,name,cuisine,protein,minutes,use,servings:2,parts:{oil:15,salt:2,...parts},steps,styles

@@ -19,6 +19,8 @@ const aliases = {
   turmeric:['turmeric','turmeric powder'],
   oregano:['oregano'],
   mayo:['mayo'],
+  sugar:['white sugar','granulated sugar'],
+  riceVinegar:['rice wine vinegar'],
   rice:['white rice','jasmine rice','basmati rice','dry rice'],
   pasta:['pasta','dry pasta'],
   chickpea:['chickpeas','canned chickpeas','garbanzo beans'],
@@ -37,7 +39,7 @@ const esc = text => String(text).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;'
 function ingredientLookup() {
   const lookup = new Map();
   for (const item of Object.values(ingredients).filter(eligible)) {
-    for (const label of [item.name,item.name.split(',')[0],...(aliases[item.id] || [])]) {
+    for (const label of [item.name,item.name.split(',')[0],...(aliases[item.id] || []),...(item.aliases || [])]) {
       const key = normalize(label);
       if (!lookup.has(key)) lookup.set(key,item.id);
     }
@@ -73,8 +75,16 @@ export function parsePantryList(text) {
 }
 
 export function withPantryProfile(config, profile) {
-  const pantry = Object.fromEntries((profile?.items || [])
-    .filter(id=>Object.hasOwn(ingredients,id) && eligible(ingredients[id])).map(id=>[id,'enough']));
+  const selected = new Set(profile?.items || []);
+  const pantry = {};
+  if (selected.size) {
+    const lookup = ingredientLookup();
+    const stocked = new Set([...selected].map(id=>Object.hasOwn(ingredients,id) ? lookup.get(normalize(ingredients[id].name)) || id : id));
+    for (const item of Object.values(ingredients).filter(eligible)) {
+      const canonical = lookup.get(normalize(item.name));
+      if (stocked.has(item.id) || stocked.has(canonical)) pantry[item.id] = 'enough';
+    }
+  }
   return {...config,pantry:{...pantry,...config.pantry}};
 }
 
@@ -86,8 +96,12 @@ export function createPantryProfile(onSave) {
 
   return function openPantryProfile() {
     const initial = readPantryProfile();
-    const selected = new Set(initial.items), extras = new Map(initial.unmatched.map(name=>[normalize(name),name]));
-    const available = Object.values(ingredients).filter(eligible).sort((a,b)=>a.name.localeCompare(b.name));
+    const lookup = ingredientLookup();
+    const canonicalId = item => lookup.get(normalize(item.name)) || item.id;
+    const selected = new Set(initial.items.map(id=>Object.hasOwn(ingredients,id) ? canonicalId(ingredients[id]) : id));
+    const extras = new Map(initial.unmatched.map(name=>[normalize(name),name]));
+    const available = Object.values(ingredients).filter(item=>eligible(item)&&canonicalId(item)===item.id)
+      .sort((a,b)=>a.name.localeCompare(b.name));
     // An item entered before it existed in the catalog can match a later imported recipe.
     for (const [key,label] of extras) {
       const {items} = parsePantryList(label);
@@ -112,6 +126,7 @@ export function createPantryProfile(onSave) {
           <blockquote>List the seasonings, sauces, oils and shelf-stable foods you can clearly identify. Use one ingredient per line. Keep distinct items like dark soy sauce and regular soy sauce separate. Omit anything you can’t read.</blockquote>
         </details>
         <p id="pantry-feedback" class="form-message" role="status"></p>
+        <label class="search-label">Find a pantry item <input type="search" id="filter-pantry" placeholder="Try mustard, vinegar or flour"></label>
         <div id="pantry-options"></div>
         <button type="submit" class="primary">Save pantry</button>
       </form>`;
@@ -120,12 +135,17 @@ export function createPantryProfile(onSave) {
     const input = dialog.querySelector('#pantry-list');
     const feedback = dialog.querySelector('#pantry-feedback');
     function drawOptions() {
-      const groups = [
-        ['Seasonings',available.filter(item=>seasonings.has(item.id))],
-        ['Sauces, oils & condiments',available.filter(item=>condiments.has(item.id))],
-        ['Dry goods, canned foods & other items',available.filter(item=>!seasonings.has(item.id)&&!condiments.has(item.id))],
-      ];
-      options.innerHTML = groups.map(([label,items])=>`<fieldset><legend>${esc(label)}</legend><div class="checks pantry-checks">${items.map(item=>
+      const query = normalize(dialog.querySelector('#filter-pantry').value);
+      const groups = new Map(['Seasonings','Sauces, oils & condiments','Baking & sweeteners','Dry goods & canned foods'].map(label=>[label,[]]));
+      for (const item of available) {
+        const labels = [item.name,...(aliases[item.id] || []),...(item.aliases || [])];
+        if (query && !labels.some(label=>normalize(label).includes(query))) continue;
+        const group = item.pantryGroup || (seasonings.has(item.id) ? 'Seasonings' :
+          condiments.has(item.id) ? 'Sauces, oils & condiments' : ['sugar','cornstarch'].includes(item.id) ?
+          'Baking & sweeteners' : 'Dry goods & canned foods');
+        groups.get(group).push(item);
+      }
+      options.innerHTML = [...groups].filter(([,items])=>items.length).map(([label,items])=>`<fieldset><legend>${esc(label)}</legend><div class="checks pantry-checks">${items.map(item=>
         `<label><input type="checkbox" data-ingredient="${esc(item.id)}" ${selected.has(item.id)?'checked':''}>${esc(item.name)}</label>`).join('')}</div></fieldset>`).join('') +
         (extras.size ? `<fieldset><legend>Other items you listed</legend><p class="muted">Saved here for reference until matched to a Whippit ingredient.</p><div class="checks pantry-checks">${[...extras].map(([key,label])=>
           `<label><input type="checkbox" data-extra="${esc(key)}" checked>${esc(label)}</label>`).join('')}</div></fieldset>` : '');
@@ -151,6 +171,7 @@ export function createPantryProfile(onSave) {
       if (dataset.extra && checked) extras.set(dataset.extra,event.target.parentElement.textContent.trim());
     };
     dialog.querySelector('#parse-pantry').onclick = applyList;
+    dialog.querySelector('#filter-pantry').oninput = drawOptions;
     dialog.querySelector('#pantry-file').onchange = async event=>{
       const file = event.target.files[0];
       if (!file) return;
