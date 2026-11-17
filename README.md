@@ -1,32 +1,33 @@
 # Whippit
 
-Plan a week's dinners and optional meal-prep lunches, then shop from one package-priced grocery list. The current release saves each week in the browser used to open it.
+Plan a week of dinners and optional batch-prep lunches, then shop from one list with whole-package estimates.
 
-- Select dinner nights and servings, including different servings on guest nights.
-- Add weekday lunches, choose portions per day, and pick one batch or two.
-- Request a theme, exclude cuisines, styles or ingredients, confirm pantry stock, and adjust price estimates.
-- Preview a complete week or a swap, pin favorite meals, and check off or copy the grocery list.
-- Install the PWA from an HTTPS deployment. On iPhone use Safari's **Add to Home Screen**.
+- Use a phone-first layout with bottom navigation, a focused setup sheet, large tap targets and grocery check-offs.
+- Browse 48 recipes, including 30 adaptations linked to their original publishers or cooking creators. Search by ingredient, cuisine, or mood.
+- Paste a recipe or import a supported recipe page. Review servings, ingredient quantities and grocery matches before saving. Open the publisher's page for imported cooking instructions.
+- Favorite any recipe and find it again under Favorites. Recipes you add also appear as options in the planner and in eligible meal swaps.
+- Pick meal days, set serving counts, request a theme, exclude foods, and adjust pantry stock or prices to match your store.
+- Reuse groceries across meals, preview dinner swaps, check off a shopping trip, and copy the combined list.
+
+Meal plans, recipes you add, and favorites currently save in your browser. Shelf prices are editable examples. Adapted cards use Whippit's own steps and package quantities.
 
 ## Develop in Codex cloud
 
-Node 20 or newer is sufficient. The app has no package dependencies or build step.
+Node 20 or newer is sufficient.
 
 ```sh
 npm test
 npm start
 ```
 
-Open the forwarded port 4173 for a preview. Any static host can serve the app, including a project subpath on GitHub Pages. Publish the root and use HTTPS for the service worker.
+Open the forwarded port 4173. The development server serves the app and its recipe link importer. Link import reads structured metadata from supported publishers, and pasted text works for other public sources or your own notes.
 
-## Planner
-
-The versioned browser storage adapter lives in `storage.js`. The independent planner and recipe catalog live in `planner.js` and `catalog.js`. Grocery quantities aggregate dinner servings and lunch-batch servings before pantry subtraction and package rounding. Prices are illustrative and editable. The planner caps its search and ranks feasible weeks by projected perishable remainder, purchase cost and variety. A plan above target requires an explicit save.
-
-For lunch prep, the default uses a second batch for four or five selected weekdays. For a single long batch, the UI calls out when to freeze later portions and links to USDA guidance.
+`npm run build` produces a single Worker entrypoint at `dist/server/index.js` for ChatGPT Sites. It serves the app and the recipe-link endpoint. The private hosted Site uses a separate deployment repository. This GitHub repo remains the app source.
 
 ## Next milestones
 
-1. Review the meal planning and grocery flow on phone and desktop. Tune the recipe catalog and package estimates with actual shopping receipts.
-2. Add sign-in and a cloud storage adapter keyed by account and week. Migrate saved browser weeks with explicit confirmation and use revision checks for concurrent edits.
-3. Consider a grocery-cart handoff after confirming supported retailer access.
+1. Add cloud storage for weeks, user recipes, favorites and price preferences. Migrate existing browser data with review and handle edits from two devices without silently overwriting work.
+2. Associate synced data with a remembered ChatGPT or Google account. Verify signed-in, signed-out and reconnect flows on phone and desktop.
+3. Run the same core journeys after sync is implemented, including offline recovery and simultaneous edits. The responsive design pass is implemented and checked at 320px and 390px frame widths and desktop size. Physical iPhone Safari testing is still needed.
+
+See `DEVELOPMENT_PLAN.md` for the next implementation and acceptance checks.

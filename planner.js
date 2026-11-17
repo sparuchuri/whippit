@@ -22,16 +22,17 @@ export function slotsFor(config) {
 }
 
 export function eligibility(recipe, slot, config) {
-  return (recipe.use === 'both' || slot.type === 'dinner') &&
+  return (recipe.use === 'both' || recipe.use === slot.type) &&
     !tags(recipe).some(tag => config.excluded.includes(tag)) &&
     !Object.keys(recipe.parts).some(id => config.excludedIngredients?.includes(id));
 }
 
-export function grocery(assignments, config) {
+export function grocery(assignments, config, details=true) {
   const needs = {};
   for (const {recipeId,servings} of assignments) {
-    for (const [id,amount] of Object.entries(byId[recipeId].parts)) {
-      needs[id] = (needs[id] || 0) + amount * servings / 2;
+    const recipe = byId[recipeId];
+    for (const [id,quantity] of Object.entries(recipe.parts)) {
+      needs[id] = (needs[id] || 0) + quantity * servings / recipe.servings;
     }
   }
   const lines = [];
@@ -43,12 +44,12 @@ export function grocery(assignments, config) {
     const onHand = config.pantry[id] === 'enough' ? need : (config.pantry[id] || 0);
     const net = Math.max(0,need-onHand);
     const price = config.prices[id] ?? item.cents;
-    const packs = Math.ceil(net/item.pack);
+    const packs = Math.max(0, Math.ceil(net/item.pack - 1e-10));
     const remaining = Math.max(0,packs*item.pack-net) + Math.max(0,onHand-need);
     const cost = packs*price;
     cents += cost;
     waste += remaining/item.pack*price*item.risk;
-    if (need || remaining) lines.push({
+    if (details && (need || remaining)) lines.push({
       ...item,need,packs,cost,remaining,usedPantry:Math.min(onHand,need),
       signature:[id,item.pack,packs].join(':')
     });
@@ -92,7 +93,7 @@ export function generate(config, locked={}, previous=[]) {
           const assignments = [...state.assignments,{...slots[index],recipeId:item.id}];
           const themed = themeMet(assignments,config.theme);
           if (index === slots.length-1 && !themed) continue;
-          const basket = grocery(assignments,config);
+          const basket = grocery(assignments,config,false);
           next.push({assignments,basket,themed,cents:basket.cents,rank:score(assignments,basket,previous),
             key:state.key+':'+item.id});
         }
@@ -118,7 +119,7 @@ export function generate(config, locked={}, previous=[]) {
     if (distinct.has(key)) return false;
     distinct.add(key);
     return true;
-  }).slice(0,3);
+  }).slice(0,3).map(item => ({...item,basket:grocery(item.assignments,config)}));
   return options.length ? {options} : {error:'Could not fill this week with distinct eligible meals. Try fewer slots or fewer exclusions.'};
 }
 

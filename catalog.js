@@ -1,3 +1,5 @@
+import { extraIngredients, curatedRecipes } from './curated.js';
+
 const entries = [
   ['chicken','Chicken breast','Meat & fish',454,'g',649,1],
   ['salmon','Salmon','Meat & fish',340,'g',1099,1],
@@ -29,10 +31,10 @@ const entries = [
   ['soy','Soy sauce','Pantry',296,'mL',279,0],
   ['paprika','Smoked paprika','Pantry',45,'g',279,0],
 ];
-export const ingredients = Object.fromEntries(entries.map(([id,name,aisle,pack,unit,cents,risk]) => [id,{id,name,aisle,pack,unit,cents,risk}]));
+export const ingredients = Object.fromEntries([...entries,...extraIngredients].map(([id,name,aisle,pack,unit,cents,risk]) => [id,{id,name,aisle,pack,unit,cents,risk}]));
 export const staples = ['oil','salt','cumin','curry','soy','paprika'];
 const recipe = (id,name,cuisine,protein,minutes,use,parts,steps,styles=[]) => ({
-  id,name,cuisine,protein,minutes,use,parts:{oil:15,salt:2,...parts},steps,styles
+  id,name,cuisine,protein,minutes,use,servings:2,parts:{oil:15,salt:2,...parts},steps,styles
 });
 const rice = 'Cook the rice according to its package directions.';
 const pasta = 'Cook pasta in salted water until al dente. Reserve a little cooking water before draining.';
@@ -57,6 +59,20 @@ export const recipes = [
   recipe('pepper-quesadilla','Pepper, Mushroom & Cheddar Quesadillas','Mexican-inspired','Cheese',25,'dinner',{pepper:1,mushroom:115,cheddar:110,tortilla:4,lime:1},['Slice peppers and mushrooms and sauté until tender.','Fill tortillas with vegetables and cheddar. Toast both sides in a skillet until the cheese melts.','Cut into wedges and serve with lime.'],['Vegetarian']),
   recipe('broccoli-pasta','Lemon Broccoli Pasta','Italian-inspired','Cheese',25,'both',{broccoli:240,pasta:180,feta:80,lemon:1},[pasta,'Steam or sauté bite-size broccoli until just tender.','Toss broccoli with pasta, feta, oil, lemon and enough pasta water to loosen.'],['Vegetarian']),
 ];
+recipes.push(...curatedRecipes);
 export const byId = Object.fromEntries(recipes.map(item => [item.id,item]));
-export const categories = [...new Set(recipes.flatMap(item => [item.cuisine,...item.styles,'Seafood'].filter(tag => tag !== 'Seafood' || item.protein === 'Seafood')))].sort();
-export const tags = item => [item.cuisine,...item.styles,...(item.protein === 'Seafood' ? ['Seafood'] : [])];
+export const categories = [];
+
+export const tags = item => [item.cuisine,...item.styles,...(item.protein === 'Seafood' ? ['Seafood'] : [])].filter(Boolean);
+function refreshCategories() {
+  categories.splice(0,categories.length,...[...new Set(recipes.flatMap(tags))].sort());
+}
+refreshCategories();
+
+export function registerRecipe(recipe, customIngredients=[]) {
+  if (byId[recipe.id]) return;
+  for (const item of customIngredients) ingredients[item.id] = item;
+  recipes.push(recipe);
+  byId[recipe.id] = recipe;
+  refreshCategories();
+}

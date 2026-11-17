@@ -1,12 +1,18 @@
 import { byId, ingredients, staples, categories, recipes, tags } from './catalog.js';
-import { dayNames, defaults, generate, swaps, grocery, money, amount, weekKey, dateLabel, shiftWeek } from './planner.js';
+import { dayNames, defaults, generate, swaps, grocery, money, amount, weekKey, dateLabel, shiftWeek, slotsFor, eligibility } from './planner.js';
 import { readWeeks, writeWeeks } from './storage.js';
+import {createRecipeLibrary} from './recipe-library.js';
+import {recipeMatches} from './recipe-tools.js';
+import {icon,dishMark} from './ui.js';
 
 const $ = selector => document.querySelector(selector);
 const form = $('#form'), results = $('#results'), dialog = $('#detail');
+const setup = $('#setup-dialog');
+document.querySelectorAll('[data-icon]').forEach(el => {el.innerHTML=icon(el.dataset.icon);});
 const weeks = readWeeks();
 let week = weekKey(), view = 'week', options = [], optionIndex = 0, draft = null;
 let current = weeks[week] || null;
+let generation = null;
 const field = name => form.elements.namedItem(name);
 const esc = value => String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const checked = bool => bool ? 'checked' : '';
@@ -22,15 +28,39 @@ const cap = config => Math.round(config.budget*100);
 $('#dinner-days').innerHTML = dayButtons('dinnerDay',7);
 $('#lunch-days').innerHTML = dayButtons('lunchDay',5);
 $('#guests').innerHTML = dayNames.map((day,i) => `<label class="field">${day}<input type="number" name="guest${i}" min="1" max="8" placeholder="Default" aria-label="${day} dinner servings"></label>`).join('');
-field('theme').innerHTML = '<option value="">Any theme</option>'+categories.map(tag => `<option>${esc(tag)}</option>`).join('');
-$('#exclusions').innerHTML = categories.map(tag => `<label><input type="checkbox" name="exclude" value="${esc(tag)}">${esc(tag)}</label>`).join('');
-$('#ingredients').innerHTML = Object.values(ingredients).map(item => `<label><input type="checkbox" name="excludeIngredient" value="${item.id}">${esc(item.name)}</label>`).join('');
-$('#pantry').innerHTML = staples.map(id => `<label><input type="checkbox" name="pantry" value="${id}">${esc(ingredients[id].name)} on hand</label>`).join('');
-$('#prices').innerHTML = Object.values(ingredients).map(item => `<div><label class="field">${esc(item.name)} · ${amount(item.pack,item.unit)} ($)<input type="number" min="0" max="999" step=".01" name="price-${item.id}" placeholder="${(item.cents/100).toFixed(2)}"></label><label class="field">On hand (${item.unit})<input type="number" min="0" max="100000" step=".25" name="stock-${item.id}" placeholder="0" aria-label="${esc(item.name)} on hand (${item.unit})"></label></div>`).join('');
+const library = createRecipeLibrary({
+  beforeSave:readConfig,
+  afterSave(settings) {
+    populateCatalogFields();
+    fill(settings);
+    announce('Recipe added to My recipes.');
+    render();
+  },
+  onOpen(id) {
+    const item = byId[id];
+    if (item) showRecipeDetails(item,item.servings);
+  },
+  notify:announce,
+});
+function populateCatalogFields() {
+  field('theme').innerHTML = '<option value="">Any theme</option>'+categories.map(tag => `<option>${esc(tag)}</option>`).join('');
+  $('#exclusions').innerHTML = categories.map(tag => `<label><input type="checkbox" name="exclude" value="${esc(tag)}">${esc(tag)}</label>`).join('');
+  $('#ingredients').innerHTML = Object.values(ingredients).map(item => `<label><input type="checkbox" name="excludeIngredient" value="${item.id}">${esc(item.name)}</label>`).join('');
+  $('#pantry').innerHTML = staples.map(id => `<label><input type="checkbox" name="pantry" value="${id}">${esc(ingredients[id].name)} on hand</label>`).join('');
+  $('#prices').innerHTML = Object.values(ingredients).map(item => `<div><label class="field">${esc(item.name)} · ${amount(item.pack,item.unit)} ($)<input type="number" min="0" max="999" step=".01" name="price-${item.id}" placeholder="${(item.cents/100).toFixed(2)}"></label><label class="field">On hand (${item.unit})<input type="number" min="0" max="100000" step=".25" name="stock-${item.id}" placeholder="0" aria-label="${esc(item.name)} on hand (${item.unit})"></label></div>`).join('');
+}
+populateCatalogFields();
 
 function announce(message='') {
   $('#status').textContent = message;
   $('#status').classList.toggle('status',Boolean(message));
+  if (setup.open) $('#setup-status').textContent = message;
+}
+function openSetup() {
+  $('#setup-status').textContent='';
+  setup.showModal();
+  $('#setup-title').focus();
+  setup.scrollTop=0;
 }
 function fill(config) {
   checkValues('dinnerDay',config.dinnerDays.map(String));
@@ -95,10 +125,11 @@ function prepText(slot) {
 function meal(slot,plan) {
   const item = byId[slot.recipeId], locked = Boolean(plan.locks[slot.id]);
   return `<article class="meal panel ${slot.type === 'lunch' ? 'prep' : ''}">
-    <div class="date-badge">${slot.type === 'lunch' ? 'Batch' : dayNames[slot.day].slice(0,3)+' '+dateAtDay(slot.day)}</div>
-    <div><button class="meal-title" data-recipe="${slot.id}">${esc(item.name)}</button>
-    <p class="muted">${slot.type === 'lunch' ? esc(prepText(slot)) : slot.servings+' servings'} · ${item.minutes} min · ${esc(item.cuisine)}</p></div>
-    <div class="actions"><button data-lock="${slot.id}" aria-label="${locked ? 'Unlock' : 'Lock'} ${esc(item.name)}" ${draft ? 'disabled' : ''}>${locked ? 'Unlock' : 'Lock'}</button>
+    <div class="date-badge">${slot.type === 'lunch' ? 'Lunch<b>prep</b>' : dayNames[slot.day].slice(0,3)+'<b>'+dateAtDay(slot.day)+'</b>'}</div>
+    ${dishMark(item)}
+    <div><div class="meal-cuisine">${esc(item.cuisine)}</div><button class="meal-title" data-recipe="${slot.id}">${esc(item.name)}</button>
+    <p class="muted">${slot.type === 'lunch' ? esc(prepText(slot)) : slot.servings+' servings'} · ${item.minutes} min</p></div>
+    <div class="actions"><button data-lock="${slot.id}" aria-pressed="${locked}" aria-label="${locked ? 'Unlock' : 'Lock'} ${esc(item.name)}" ${draft ? 'disabled' : ''}>${locked ? 'Locked ✓' : 'Keep'}</button>
     <button data-swap="${slot.id}" aria-label="Swap ${esc(item.name)}" ${locked || draft ? 'disabled' : ''}>Swap</button></div></article>`;
 }
 const dateAtDay = day => dateLabel(week,day,{day:'numeric'});
@@ -106,11 +137,11 @@ function renderWeek(plan,basket) {
   const dinner = plan.assignments.filter(slot => slot.type === 'dinner');
   const lunches = plan.assignments.filter(slot => slot.type === 'lunch');
   const reused = basket.lines.filter(item => item.risk && item.need && plan.assignments.filter(slot => byId[slot.recipeId].parts[item.id]).length > 1);
-  return summary(plan,basket) + (draft ? `<div class="actions"><button id="save" class="primary">${basket.cents > cap(plan.config) ? 'Save over target' : 'Save week'}</button>
+  return summary(plan,basket) + (draft ? `<div class="actions plan-actions"><button id="save" class="primary">${basket.cents > cap(plan.config) ? 'Save over target' : 'Save week'}</button>
     ${options.length > 1 ? `<button id="alternative">Next option (${optionIndex+1}/${options.length})</button>` : ''}<button id="cancel">Discard preview</button></div>` : '') +
-    (reused.length ? `<p class="tag">Shared across recipes · ${reused.slice(0,4).map(item => esc(item.name)).join(', ')}</p>` : '') +
-    (dinner.length ? `<div class="section-title"><h2>Dinners</h2></div><div class="meal-list">${dinner.map(item => meal(item,plan)).join('')}</div>` : '') +
-    (lunches.length ? `<div class="section-title"><h2>Lunch prep</h2></div><div class="meal-list">${lunches.map(item => meal(item,plan)).join('')}</div>
+    (reused.length ? `<p class="tag reuse-note">${icon('sparkles')}<span>Doing double duty · ${reused.slice(0,4).map(item => esc(item.name)).join(', ')}</span></p>` : '') +
+    (dinner.length ? `<div class="section-title"><h2>What’s for dinner?</h2><span class="muted">${dinner.length} nights sorted</span></div><div class="meal-list">${dinner.map(item => meal(item,plan)).join('')}</div>` : '') +
+    (lunches.length ? `<div class="section-title"><h2>Lunch, ready to go.</h2><span class="muted">${lunches.length} prep batches</span></div><div class="meal-list">${lunches.map(item => meal(item,plan)).join('')}</div>
     ${lunches.some(slot => slot.days.at(-1)-slot.prepDay > 3) ? '<p class="notice">Freeze portions for lunches more than 3 days after prep. <a href="https://ask.fsis.usda.gov/article/How-do-I-handle-leftovers-safely/" target="_blank" rel="noopener noreferrer">USDA storage guidance</a></p>' : ''}` : '');
 }
 function renderShop(plan,basket) {
@@ -134,10 +165,21 @@ function render() {
     if (button.dataset.view === view) button.setAttribute('aria-current','page');
     else button.removeAttribute('aria-current');
   });
-  $('#settings').hidden = view === 'shop';
+  $('.intro').classList.toggle('compact',view !== 'week' || Boolean(active()));
+  $('#week-tools').hidden = view === 'recipes';
+  $('#open-setup').hidden = view !== 'week';
+  const titles={week:'Good food.<br><em>Less fuss.</em>',shop:'One list.<br><em>All sorted.</em>',recipes:'Your next<br><em>favorite meal.</em>'};
+  const intros={week:'A week of dinners, lunches ready to go, and one happy little grocery list.',shop:'Everything for your week, grouped by aisle. Tap as you shop.',recipes:'Find something that fits your mood. Save the ones you love.'};
+  $('#intro-title').innerHTML=titles[view];
+  $('#intro-copy').textContent=intros[view];
+  $('#intro-eyebrow').textContent=view === 'week' ? 'A little planning. A lot of delicious.' : view === 'shop' ? 'A happier grocery run' : 'GOOD THINGS ARE COOKING';
+  if (view === 'recipes') {
+    library.render(results);
+    return;
+  }
   const plan = active();
   if (!plan) {
-    results.innerHTML = `<section class="panel empty"><h2>${view === 'week' ? 'Plan your meals' : 'Your grocery list starts with a plan'}</h2><p>Choose your days, servings and budget to see recipes and package quantities for the week.</p>${view === 'shop' ? '<button data-go-week>Go to Week</button>' : ''}</section>`;
+    results.innerHTML = `<section class="panel empty"><span class="empty-icon" aria-hidden="true">${view === 'week' ? '🍋' : '🧺'}</span><h2>${view === 'week' ? 'Let’s make it a delicious week.' : 'A little planning comes first.'}</h2><p>Pick your days, people, and budget. We’ll put together meals that share ingredients and keep waste down.</p><button class="primary" ${view === 'shop' ? 'data-go-week' : 'data-setup'}>${icon('sparkles')}${view === 'week' ? 'Plan my week' : 'Go to my week'}</button><div class="empty-steps"><span>① Pick your vibe</span><span>② Make it yours</span><span>③ Shop once</span></div></section>`;
     return;
   }
   const basket = grocery(plan.assignments,plan.config);
@@ -145,6 +187,11 @@ function render() {
 }
 function changeWeek(delta) {
   if (draft && !confirm('Discard this unsaved preview and change weeks?')) return;
+  if (generation) {
+    generation.cancel();
+    generation=null;
+    form.querySelector('[type=submit]').disabled=false;
+  }
   week = shiftWeek(week,delta);
   draft = null;
   options = [];
@@ -159,74 +206,131 @@ function showDialog(title,html) {
   dialog.showModal();
 }
 function showRecipe(id) {
-  const slot = active().assignments.find(item => item.id === id), item = byId[slot.recipeId];
-  const storage = slot.type === 'lunch' ? '<p class="notice">Portion into shallow containers and refrigerate or freeze promptly. Freeze any portions you’ll eat more than 3 days after prep. <a href="https://ask.fsis.usda.gov/article/How-do-I-handle-leftovers-safely/" target="_blank" rel="noopener noreferrer">USDA guidance</a></p>' : '';
-  showDialog(item.name,`<p class="muted">${item.minutes} min · ${slot.servings} servings</p>${storage}
-    <h3>Ingredients</h3><ul class="dialog-list">${list(Object.entries(item.parts).map(([key,value]) => esc(ingredients[key].name)+' · '+amount(value*slot.servings/2,ingredients[key].unit)))}</ul>
-    <h3>Steps</h3><ol class="dialog-list">${list(item.steps.map(esc))}</ol>`);
+  const slot = active().assignments.find(item => item.id === id);
+  if (slot) showRecipeDetails(byId[slot.recipeId],slot.servings,slot.type === 'lunch');
+}
+function showRecipeDetails(item,servings,forLunch=false) {
+  const storage = forLunch ? '<p class="notice">Portion into shallow containers and refrigerate or freeze promptly. Freeze any portions you’ll eat more than 3 days after prep. <a href="https://ask.fsis.usda.gov/article/How-do-I-handle-leftovers-safely/" target="_blank" rel="noopener noreferrer">USDA guidance</a></p>' : '';
+  const steps = item.steps.length
+    ? `<ol class="dialog-list">${list(item.steps.map(esc))}</ol>`
+    : '<p>Open the original recipe above for cooking instructions.</p>';
+  showDialog(item.name,`<div class="recipe-detail-meta"><p class="muted">${item.minutes} min · ${servings} servings</p>${library.favoriteButton(item)}</div>
+    ${library.attribution(item)}${storage}
+    <h3>Ingredients</h3><ul class="dialog-list">${list(Object.entries(item.parts).map(([key,value]) => esc(ingredients[key].name)+' · '+amount(value*servings/item.servings,ingredients[key].unit)))}</ul>
+    <h3>Steps</h3>${steps}`);
 }
 function showSwaps(id) {
   const plan = current, currentBasket = grocery(plan.assignments,plan.config);
   const alternatives = swaps(plan.assignments,id,plan.config);
-  showDialog('Swap this meal', alternatives.length ? alternatives.map(option => {
-    const delta = option.basket.cents-currentBasket.cents;
-    const remainder = option.basket.waste-currentBasket.waste;
-    return `<div class="swap-option"><div><b>${esc(byId[option.recipeId].name)}</b><p class="muted">${money(option.basket.cents)} total · ${delta ? (delta > 0 ? '+' : '−')+money(Math.abs(delta)) : 'same cost'} · ${remainder < -1 ? 'less' : remainder > 1 ? 'more' : 'similar'} estimated perishable remainder</p></div><button data-pick="${option.recipeId}">Preview</button></div>`;
-  }).join('') : '<p>There are no eligible swaps with these preferences.</p>');
-  $('#dialog-content').onclick = event => {
-    const id = event.target.dataset.pick;
-    if (!id) return;
+  showDialog('Swap this meal',alternatives.length
+    ? '<label class="search-label">Find a swap <input id="swap-search" type="search" placeholder="Recipe or ingredient"></label><div id="swap-options"></div>'
+    : '<p>There are no eligible swaps with these preferences.</p>');
+  if (!alternatives.length) return;
+  const swapList=$('#swap-options');
+  function renderOptions(query) {
+    swapList.innerHTML=alternatives.filter(option=>recipeMatches(byId[option.recipeId],query)).map(option => {
+      const delta = option.basket.cents-currentBasket.cents;
+      const remainder = option.basket.waste-currentBasket.waste;
+      return `<div class="swap-option"><div><b>${esc(byId[option.recipeId].name)}</b><p class="muted">${money(option.basket.cents)} total · ${delta ? (delta > 0 ? '+' : '−')+money(Math.abs(delta)) : 'same cost'} · ${remainder < -1 ? 'less' : remainder > 1 ? 'more' : 'similar'} estimated perishable remainder</p></div><button data-pick="${option.recipeId}" aria-label="Preview ${esc(byId[option.recipeId].name)}">Preview</button></div>`;
+    }).join('') || '<p>No swaps match this search.</p>';
+  }
+  renderOptions('');
+  $('#swap-search').oninput=event=>renderOptions(event.target.value);
+  swapList.onclick = event => {
+    const chosen = event.target.dataset.pick;
+    if (!chosen) return;
     options = [];
-    preview(plan.config,plan.locks,alternatives.find(option => option.recipeId === id));
+    preview(plan.config,plan.locks,alternatives.find(option => option.recipeId === chosen));
     dialog.close();
     announce('Review the swap and save to update your week.');
     render();
+    $('#save')?.focus();
   };
+}
+function startPlan(config,locks,previous) {
+  let worker;
+  try {
+    worker=new Worker(new URL('./planner-worker.js',import.meta.url),{type:'module'});
+  } catch { /* A browser can still plan if it disallows workers. */ }
+  let resolveResult, fallback;
+  const result=new Promise(resolve=>{resolveResult=resolve;});
+  const useFallback=()=>{
+    worker?.terminate();
+    fallback=setTimeout(()=>{
+      try { resolveResult(generate(config,locks,previous)); }
+      catch { resolveResult({error:'The planner couldn’t finish. Adjust the selections and try again.'}); }
+    },30);
+  };
+  if (worker) {
+    worker.onmessage=event=>{worker.terminate();resolveResult(event.data);};
+    worker.onerror=event=>{event.preventDefault();useFallback();};
+    worker.postMessage({config,locks,previous,custom:library.custom()});
+  } else useFallback();
+  return {result,cancel(){worker?.terminate();clearTimeout(fallback);resolveResult(null);}};
 }
 field('lunchEnabled').addEventListener('change',() => {$('#lunch-settings').hidden = !field('lunchEnabled').checked;});
 $('#suggest').addEventListener('click',() => {
   const config = readConfig();
+  const slots=slotsFor(config);
   const suggestions = categories.filter(theme => theme !== config.theme && !config.excluded.includes(theme))
-    .map(theme => ({theme,count:recipes.filter(item => tags(item).includes(theme) &&
-      (config.dinnerDays.length || (config.lunchDays.length && item.use === 'both')) &&
-      !tags(item).some(tag => config.excluded.includes(tag)) &&
-      !Object.keys(item.parts).some(id => config.excludedIngredients.includes(id))).length}))
+    .map(theme => ({theme,count:recipes.filter(item => tags(item).includes(theme) && slots.some(slot=>eligibility(item,slot,config))).length}))
     .filter(item => item.count).sort((a,b) => b.count-a.count || a.theme.localeCompare(b.theme));
   if (suggestions.length) {
     field('theme').value = suggestions[0].theme;
     announce('Suggested theme: '+suggestions[0].theme+'.');
   } else announce('Choose meal days and loosen exclusions to find a theme.');
 });
-form.addEventListener('submit',event => {
+form.addEventListener('submit',async event => {
   event.preventDefault();
-  const config = readConfig(), ids = new Set(config.dinnerDays.map(day => 'd'+day));
-  if (config.lunchDays.length) ids.add('l0');
-  if (config.splitLunch && config.lunchDays.length > 3) ids.add('l1');
+  if (generation) return;
+  const config = readConfig(), ids = new Set(slotsFor(config).map(slot=>slot.id));
   const missingLocks = Object.keys(current?.locks || {}).filter(id => !ids.has(id));
   if (missingLocks.length) { announce('Unlock meals you want to remove before changing their dates.'); return; }
   const locks = current?.locks || {};
   const previous = [shiftWeek(week,-1),shiftWeek(week,-2)].flatMap(key => (weeks[key]?.assignments || []).map(item => item.recipeId));
-  const proposal = generate(config,locks,previous);
+  const job = startPlan(config,locks,previous);
+  generation = job;
+  const submit = form.querySelector('[type=submit]');
+  submit.disabled = true;
+  submit.innerHTML=icon('sparkles')+'Planning your week…';
+  announce('Planning meals and checking grocery packages…');
+  const proposal = await job.result;
+  if (generation !== job) return;
+  generation = null;
+  submit.disabled = false;
+  submit.innerHTML=icon('sparkles')+'Generate week';
   if (proposal.error) {announce(proposal.error);return;}
   options = proposal.options;
   optionIndex = 0;
   preview(config,locks,options[0]);
+  view='week';
+  setup.close();
   announce('Review the proposed week, then save it.');
   render();
-  if (matchMedia('(max-width: 660px)').matches) $('#status').scrollIntoView({block:'start'});
+  $('#status').scrollIntoView({block:'start',behavior:'instant'});
+  $('#save')?.focus({preventScroll:true});
 });
 $('#prev').onclick = () => changeWeek(-1);
 $('#next').onclick = () => changeWeek(1);
 $('#close').onclick = () => dialog.close();
-dialog.addEventListener('close',() => {$('#dialog-content').onclick = null;});
+$('#open-setup').onclick = openSetup;
+$('#close-setup').onclick = () => setup.close();
+$('#dialog-content').addEventListener('click',event=>{
+  const id=event.target.dataset.favorite;
+  if(id) library.markFavorite(id);
+});
 document.querySelector('nav').addEventListener('click',event => {
-  if (!event.target.dataset.view) return;
-  view = event.target.dataset.view;
+  const button=event.target.closest('[data-view]');
+  if (!button) return;
+  view = button.dataset.view;
+  if (!generation) announce();
   render();
+  window.scrollTo({top:0,behavior:'instant'});
 });
 results.addEventListener('click',async event => {
   const button = event.target.closest('button');
   if (!button) return;
+  if (button.hasAttribute('data-setup')) {openSetup();return;}
   if (button.hasAttribute('data-go-week')) {view='week';render();return;}
   if (button.id === 'save') {commit();return;}
   if (button.id === 'cancel') {draft=null;options=[];announce('Preview discarded.');render();return;}
@@ -239,6 +343,7 @@ results.addEventListener('click',async event => {
   if (button.dataset.recipe) {showRecipe(button.dataset.recipe);return;}
   if (button.dataset.swap) {showSwaps(button.dataset.swap);return;}
   if (button.dataset.lock) {
+    if (generation) {announce('Wait for the current plan to finish before changing locks.');return;}
     const id = button.dataset.lock;
     const locks = {...current.locks};
     if (locks[id]) delete locks[id];
