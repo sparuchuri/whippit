@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { byId, ingredients, recipes, tags } from './catalog.js';
-import { defaults, slotsFor, grocery, generate, swaps, weekKey, shiftWeek } from './planner.js';
+import { defaults, slotsFor, grocery, generate, swaps, weekKey, shiftWeek, isMeat, toDisplay, fromDisplay, displayUnit, ingredientAmount } from './planner.js';
 
 test('lunches use one scaled batch per prep session and can stand alone', () => {
   const config = {...defaults(),dinnerDays:[],lunchDays:[4,0,2,1,3],lunchPeople:2};
@@ -59,4 +59,40 @@ test('catalog includes priced packages and nonempty recipes', () => {
 test('calendar keys remain local across Sundays and year boundaries', () => {
   assert.equal(weekKey(new Date(2026,10,22,23,55)),'2026-11-16');
   assert.equal(shiftWeek('2026-12-28',1),'2027-01-04');
+});
+
+
+test('three dinners prioritize variety rather than three coconut cooks',()=>{
+ const config={...defaults(),dinnerDays:[2,3,4],dinnerPeople:1};
+ for(const plan of generate(config).options){
+  assert.ok(plan.assignments.filter(s=>byId[s.recipeId].parts.coconut).length<=1);
+  assert.ok(new Set(plan.assignments.map(s=>byId[s.recipeId].cuisine)).size>=2);
+ }
+});
+test('dinner leftovers combine guest portions and groceries once, preserving swaps',()=>{
+ const config={...defaults(),dinnerDays:[0,1,2,3,4],dinnerLeftovers:true,guests:{0:3,1:1}};
+ const slots=slotsFor(config);
+ assert.equal(slots.length,3);assert.deepEqual(slots[0].days,[0,1]);assert.equal(slots[0].servings,4);
+ const plan=generate(config).options[0].assignments;
+ const expanded=plan.flatMap(s=>s.days.map(day=>({...s,day,servings:s.portions[day]})));
+ assert.deepEqual(grocery(plan,config),grocery(expanded,config));
+ for(const swap of swaps(plan,'d0',config)){assert.deepEqual(swap.assignments[0].days,[0,1]);assert.equal(swap.assignments[0].servings,4);}
+ assert.equal(slotsFor({...config,dinnerDays:[0,4]}).length,2);
+});
+test('less preferred ingredients discourage but do not ban locked recipes',()=>{
+ const config={...defaults(),dinnerDays:[0,1,2],lessPreferredIngredients:['coconut']};
+ assert.ok(generate(config).options[0].assignments.every(s=>!byId[s.recipeId].parts.coconut));
+ assert.equal(generate(config,{d0:'spinach-curry'}).options[0].assignments[0].recipeId,'spinach-curry');
+});
+test('meat pounds convert without changing stored recipe or grocery math',()=>{
+ assert.equal(toDisplay(453.59237,ingredients.chicken),1);
+ assert.equal(fromDisplay(1,ingredients.chicken),453.59237);
+ assert.equal(isMeat({name:'Chicken stock powder',unit:'g',aisle:'Pantry'}),false);
+ assert.equal(toDisplay(28.349523125,ingredients.spinach),1);
+ assert.equal(toDisplay(29.5735295625,ingredients.coconut),1);
+ assert.equal(displayUnit(ingredients.coconut),'fl oz');
+ assert.equal(fromDisplay(1,ingredients.coconut),29.5735295625);
+ assert.equal(ingredientAmount(2,ingredients.salt),'2 g');
+ assert.equal(ingredientAmount(28.349523125,ingredients.spinach),'1 oz');
+ assert.equal(defaults().shoppingZip,'94080');
 });

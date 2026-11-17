@@ -51,3 +51,12 @@ Updated November 17, 2026. Existing private app: https://whippit.sparuchuri.chat
 - [x] Browser-check publisher search, source disclosures, reviewed recipe save and grocery check persistence.
 - [x] Preserve dinner/lunch eligibility when opening a source recipe for review.
 - [ ] Signed-in production round-trip remains blocked by the cloud browser sign-in gate; physical iPhone verification remains outstanding.
+
+## November 17: dinner variety and preferences
+- [x] Penalize similar dinners rather than reward repeated coconut dishes.
+- [x] Optional cook-once dinner batches with explicit leftover nights and combined portions.
+- [x] Configurable shopping ZIP; less-preferred ingredients distinct from exclusions.
+- [x] Display meat weights in pounds, including pantry and reviewed recipe quantities.
+- [x] 27 automated checks; preview batch scheduling, saving and preferences verified.
+- [ ] Connect a supported store-price provider and unattended weekly updates; current prices are estimates.
+- [x] GitHub access restored; source mirroring supported.

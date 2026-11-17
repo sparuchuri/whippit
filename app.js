@@ -1,5 +1,5 @@
 import { byId, ingredients, staples, categories, recipes, tags } from './catalog.js';
-import { dayNames, defaults, generate, swaps, grocery, money, amount, weekKey, dateLabel, shiftWeek, slotsFor, eligibility } from './planner.js';
+import { dayNames, defaults, generate, swaps, grocery, money, amount, weekKey, dateLabel, shiftWeek, slotsFor, eligibility, ingredientAmount, displayUnit, toDisplay, fromDisplay } from './planner.js';
 import {readWeeks,writeWeeks,initializeStorage,subscribeSync,readPreferences,writePreferences,readLibrary as readSavedLibrary} from './storage.js';
 import {setupAccountUI} from './account-ui.js';
 import {createRecipeLibrary} from './recipe-library.js';
@@ -50,8 +50,9 @@ function populateCatalogFields() {
   field('theme').innerHTML = '<option value="">Any theme</option>'+categories.map(tag => `<option>${esc(tag)}</option>`).join('');
   $('#exclusions').innerHTML = categories.map(tag => `<label><input type="checkbox" name="exclude" value="${esc(tag)}">${esc(tag)}</label>`).join('');
   $('#ingredients').innerHTML = Object.values(ingredients).map(item => `<label><input type="checkbox" name="excludeIngredient" value="${item.id}">${esc(item.name)}</label>`).join('');
+  $('#less-preferred').innerHTML = Object.values(ingredients).map(item => `<label><input type="checkbox" name="lessPreferredIngredient" value="${esc(item.id)}">${esc(item.name)}</label>`).join('');
   $('#pantry').innerHTML = staples.map(id => `<label><input type="checkbox" name="pantry" value="${id}">${esc(ingredients[id].name)} on hand</label>`).join('');
-  $('#prices').innerHTML = Object.values(ingredients).map(item => `<div><label class="field">${esc(item.name)} · ${amount(item.pack,item.unit)} ($)<input type="number" min="0" max="999" step=".01" name="price-${item.id}" placeholder="${item.unpriced?'Add price':(item.cents/100).toFixed(2)}"></label><label class="field">On hand (${item.unit})<input type="number" min="0" max="100000" step=".25" name="stock-${item.id}" placeholder="0" aria-label="${esc(item.name)} on hand (${item.unit})"></label></div>`).join('');
+  $('#prices').innerHTML = Object.values(ingredients).map(item => `<div><label class="field">${esc(item.name)} · ${ingredientAmount(item.pack,item)} ($)<input type="number" min="0" max="999" step=".01" name="price-${item.id}" placeholder="${item.unpriced?'Add price':(item.cents/100).toFixed(2)}"></label><label class="field">On hand (${displayUnit(item)})<input type="number" min="0" max="100000" step="any" name="stock-${item.id}" placeholder="0" aria-label="${esc(item.name)} on hand (${displayUnit(item)})"></label></div>`).join('');
 }
 populateCatalogFields();
 
@@ -67,6 +68,10 @@ function openSetup() {
   setup.scrollTop=0;
 }
 function fill(config) {
+  config={...defaults(),...config};
+  field('dinnerLeftovers').checked=config.dinnerLeftovers;
+  field('shoppingZip').value=config.shoppingZip;
+  checkValues('lessPreferredIngredient',config.lessPreferredIngredients);
   checkValues('dinnerDay',config.dinnerDays.map(String));
   checkValues('lunchDay',(config.lunchDays.length ? config.lunchDays : [0,1,2,3,4]).map(String));
   checkValues('exclude',config.excluded);
@@ -78,7 +83,7 @@ function fill(config) {
   dayNames.forEach((_,i) => {field('guest'+i).value = config.guests[i] || '';});
   for (const id of Object.keys(ingredients)) {
     field('price-'+id).value = config.prices[id] == null ? '' : (config.prices[id]/100).toFixed(2);
-    field('stock-'+id).value = typeof config.pantry[id] === 'number' ? config.pantry[id] : '';
+    field('stock-'+id).value = typeof config.pantry[id] === 'number' ? Number(toDisplay(config.pantry[id],ingredients[id]).toFixed(4)) : '';
   }
   $('#lunch-settings').hidden = !field('lunchEnabled').checked;
 }
@@ -86,13 +91,14 @@ function readConfig() {
   const guests = {}, pantry = {}, prices = {};
   for (const day of selected('dinnerDay')) if (field('guest'+day).value) guests[day] = Number(field('guest'+day).value);
   for (const id of Object.keys(ingredients)) {
-    if (Number(field('stock-'+id).value)) pantry[id] = Number(field('stock-'+id).value);
+    if (Number(field('stock-'+id).value)) pantry[id] = fromDisplay(Number(field('stock-'+id).value),ingredients[id]);
     if (field('price-'+id).value !== '') prices[id] = Math.round(Number(field('price-'+id).value)*100);
   }
   for (const id of selected('pantry')) pantry[id] = 'enough';
   return {
     dinnerDays:selected('dinnerDay').map(Number), lunchDays:field('lunchEnabled').checked ? selected('lunchDay').map(Number) : [],
     dinnerPeople:Number(field('dinnerPeople').value), lunchPeople:Number(field('lunchPeople').value), guests,
+    shoppingZip:field('shoppingZip').value, dinnerLeftovers:field('dinnerLeftovers').checked, lessPreferredIngredients:selected('lessPreferredIngredient'),
     splitLunch:field('splitLunch').checked, budget:Number(field('budget').value), theme:field('theme').value,
     excluded:selected('exclude'), excludedIngredients:selected('excludeIngredient'), pantry, prices
   };
@@ -120,24 +126,26 @@ function commit() {
 function summary(plan,basket) {
   const delta = cap(plan.config)-basket.cents;
   const unpriced=basket.lines.filter(line=>line.packs&&line.unpriced).length;
-  const stats = [plan.assignments.filter(slot => slot.type === 'dinner').length+' dinners'];
+  const stats = [plan.assignments.filter(slot=>slot.type==='dinner').reduce((n,s)=>n+(s.days?.length||1),0)+' dinners'];
   if (plan.config.lunchDays.length) stats.push(plan.config.lunchDays.length+' lunch days');
-  return `<div class="summary ${delta < 0 ? 'over' : ''}"><div><b>${stats.join(' · ')}</b><small>${unpriced?'Partial estimate':delta === 0 ? 'On target' : money(Math.abs(delta))+(delta > 0 ? ' below target' : ' over target')} · ${unpriced?unpriced+' items still need prices':'Sample grocery estimate'}</small></div><strong>${money(basket.cents)}${unpriced?' +':''}</strong></div>`;
+  return `<div class="summary ${delta < 0 ? 'over' : ''}"><div><b>${stats.join(' · ')}</b><small>${unpriced?'Partial estimate':delta === 0 ? 'On target' : money(Math.abs(delta))+(delta > 0 ? ' below target' : ' over target')} · ${unpriced?unpriced+' items still need prices':'Automatic estimate · ZIP '+esc(plan.config.shoppingZip || '94080')}</small></div><strong>${money(basket.cents)}${unpriced?' +':''}</strong></div>`;
 }
 function prepText(slot) {
   const prep = dateLabel(week,slot.prepDay,{weekday:'long',month:'short',day:'numeric'});
   const days = slot.days.map(day => dayNames[day].slice(0,3)).join(', ');
   return `Prep ${prep} · ${days} · ${slot.servings} portions`;
 }
-function meal(slot,plan) {
+function meal(slot,plan,displayDay=slot.day) {
+  const leftover=slot.type==='dinner'&&displayDay!==slot.day;
+  const batch=slot.type==='dinner'&&slot.days?.length>1;
   const item = byId[slot.recipeId], locked = Boolean(plan.locks[slot.id]);
   return `<article class="meal panel ${slot.type === 'lunch' ? 'prep' : ''}">
-    <div class="date-badge">${slot.type === 'lunch' ? 'Lunch<b>prep</b>' : dayNames[slot.day].slice(0,3)+'<b>'+dateAtDay(slot.day)+'</b>'}</div>
+    <div class="date-badge">${slot.type === 'lunch' ? 'Lunch<b>prep</b>' : dayNames[displayDay].slice(0,3)+'<b>'+dateAtDay(displayDay)+'</b>'}</div>
     ${dishMark(item)}
     <div><div class="meal-cuisine">${esc(item.cuisine)}</div><button class="meal-title" data-recipe="${slot.id}">${esc(item.name)}</button>
-    <p class="muted">${slot.type === 'lunch' ? esc(prepText(slot)) : slot.servings+' servings'} · ${item.minutes} min</p></div>
-    <div class="actions"><button data-lock="${slot.id}" aria-pressed="${locked}" aria-label="${locked ? 'Unlock' : 'Lock'} ${esc(item.name)}" ${draft ? 'disabled' : ''}>${locked ? 'Locked ✓' : 'Keep'}</button>
-    <button data-swap="${slot.id}" aria-label="Swap ${esc(item.name)}" ${locked || draft ? 'disabled' : ''}>Swap</button></div></article>`;
+    <p class="muted">${slot.type === 'lunch' ? esc(prepText(slot)) : leftover?'Leftovers · '+(slot.portions?.[displayDay]||plan.config.dinnerPeople)+' servings · cooked '+dayNames[slot.day]:batch?'Cook '+slot.servings+' servings · save '+(slot.servings-slot.portions[slot.day])+' for '+dayNames[slot.days[1]]:slot.servings+' '+(slot.servings===1?'serving':'servings')}${leftover?'':' · '+item.minutes+' min'}</p></div>
+    ${leftover?'<p class="muted">No cooking tonight</p>':`<div class="actions"><button data-lock="${slot.id}" aria-pressed="${locked}" aria-label="${locked ? 'Unlock' : 'Lock'} ${esc(item.name)}" ${draft ? 'disabled' : ''}>${locked ? 'Locked ✓' : 'Keep'}</button>
+    <button data-swap="${slot.id}" aria-label="Swap ${esc(item.name)}" ${locked || draft ? 'disabled' : ''}>${slot.days?.length>1?'Swap batch':'Swap'}</button></div>`}</article>`;
 }
 const dateAtDay = day => dateLabel(week,day,{day:'numeric'});
 function renderWeek(plan,basket) {
@@ -147,7 +155,7 @@ function renderWeek(plan,basket) {
   return summary(plan,basket) + (draft ? `<div class="actions plan-actions"><button id="save" class="primary">${basket.cents > cap(plan.config) ? 'Save over target' : 'Save week'}</button>
     ${options.length > 1 ? `<button id="alternative">Next option (${optionIndex+1}/${options.length})</button>` : ''}<button id="cancel">Discard preview</button></div>` : '') +
     (reused.length ? `<p class="tag reuse-note">${icon('sparkles')}<span>Doing double duty · ${reused.slice(0,4).map(item => esc(item.name)).join(', ')}</span></p>` : '') +
-    (dinner.length ? `<div class="section-title"><h2>What’s for dinner?</h2><span class="muted">${dinner.length} nights sorted</span></div><div class="meal-list">${dinner.map(item => meal(item,plan)).join('')}</div>` : '') +
+    (dinner.length ? `<div class="section-title"><h2>What’s for dinner?</h2><span class="muted">${dinner.length} cooking sessions</span></div><div class="meal-list">${dinner.flatMap(item=>(item.days||[item.day]).map(day=>({item,day}))).sort((a,b)=>a.day-b.day).map(({item,day})=>meal(item,plan,day)).join('')}</div>` : '') +
     (lunches.length ? `<div class="section-title"><h2>Lunch, ready to go.</h2><span class="muted">${lunches.length} prep batches</span></div><div class="meal-list">${lunches.map(item => meal(item,plan)).join('')}</div>
     ${lunches.some(slot => slot.days.at(-1)-slot.prepDay > 3) ? '<p class="notice">Freeze portions for lunches more than 3 days after prep. <a href="https://ask.fsis.usda.gov/article/How-do-I-handle-leftovers-safely/" target="_blank" rel="noopener noreferrer">USDA storage guidance</a></p>' : ''}` : '');
 }
@@ -161,10 +169,10 @@ function renderShop(plan,basket) {
     <div class="actions"><button id="copy">Copy list</button>${draft ? '<button data-go-week>Review and save this preview</button>' : ''}</div>`+
     groups.map(aisle => `<section class="panel shop-group"><h3>${esc(aisle)}</h3>${buy.filter(item => item.aisle === aisle).map(item =>
       `<label class="shop-row ${plan.checked.includes(item.signature) ? 'checked' : ''}"><input type="checkbox" data-item="${item.signature}" ${checked(plan.checked.includes(item.signature))} ${draft ? 'disabled' : ''}>
-      <span class="item">${esc(item.name)}<br><small class="muted">${item.packs} × ${amount(item.pack,item.unit)} pack</small></span><span class="price">${item.unpriced?'Price needed':money(item.cost)}</span></label>`).join('')}</section>`).join('')+
+      <span class="item">${esc(item.name)}<br><small class="muted">${item.packs} × ${ingredientAmount(item.pack,item)} pack</small></span><span class="price">${item.unpriced?'Price needed':money(item.cost)}</span></label>`).join('')}</section>`).join('')+
     (!buy.length ? '<p class="muted">Your pantry covers the planned ingredients.</p>' : '')+
-    (pantry.length ? `<section class="panel shop-group"><h3>Using from your pantry</h3>${pantry.map(item => `<div class="leftover"><span>${esc(item.name)}</span><span>${amount(item.usedPantry,item.unit)}</span></div>`).join('')}</section>` : '')+
-    (remaining.length ? `<section class="panel shop-group"><h3>Expected perishable leftovers</h3>${remaining.map(item => `<div class="leftover"><span>${esc(item.name)}</span><span>${amount(item.remaining,item.unit)}</span></div>`).join('')}</section>` : '');
+    (pantry.length ? `<section class="panel shop-group"><h3>Using from your pantry</h3>${pantry.map(item => `<div class="leftover"><span>${esc(item.name)}</span><span>${ingredientAmount(item.usedPantry,item)}</span></div>`).join('')}</section>` : '')+
+    (remaining.length ? `<section class="panel shop-group"><h3>Expected perishable leftovers</h3>${remaining.map(item => `<div class="leftover"><span>${esc(item.name)}</span><span>${ingredientAmount(item.remaining,item)}</span></div>`).join('')}</section>` : '');
 }
 function render() {
   $('#date').textContent = dateLabel(week,0,{month:'short',day:'numeric'})+' – '+dateLabel(week,6,{month:'short',day:'numeric'});
@@ -214,7 +222,7 @@ function showDialog(title,html) {
 }
 function showRecipe(id) {
   const slot = active().assignments.find(item => item.id === id);
-  if (slot) showRecipeDetails(byId[slot.recipeId],slot.servings,slot.type === 'lunch');
+  if (slot) showRecipeDetails(byId[slot.recipeId],slot.servings,slot.type === 'lunch'||slot.days?.length>1);
 }
 function showRecipeDetails(item,servings,forLunch=false) {
   const storage = forLunch ? '<p class="notice">Portion into shallow containers and refrigerate or freeze promptly. Freeze any portions you’ll eat more than 3 days after prep. <a href="https://ask.fsis.usda.gov/article/How-do-I-handle-leftovers-safely/" target="_blank" rel="noopener noreferrer">USDA guidance</a></p>' : '';
@@ -223,7 +231,7 @@ function showRecipeDetails(item,servings,forLunch=false) {
     : '<p>Open the original recipe above for cooking instructions.</p>';
   showDialog(item.name,`<div class="recipe-detail-meta"><p class="muted">${item.minutes} min · ${servings} servings</p>${library.favoriteButton(item)}</div>
     ${library.attribution(item)}${storage}
-    <h3>Ingredients</h3><ul class="dialog-list">${list(Object.entries(item.parts).map(([key,value]) => esc(ingredients[key].name)+' · '+amount(value*servings/item.servings,ingredients[key].unit)))}</ul>
+    <h3>Ingredients</h3><ul class="dialog-list">${list(Object.entries(item.parts).map(([key,value]) => esc(ingredients[key].name)+' · '+ingredientAmount(value*servings/item.servings,ingredients[key])))}</ul>
     ${item.ingredientNotes?.length?'<h3>Recipe notes</h3><ul class="dialog-list">'+list(item.ingredientNotes.map(esc))+'</ul>':''}<h3>Steps</h3>${steps}`);
 }
 function showSwaps(id) {
@@ -368,7 +376,7 @@ results.addEventListener('click',async event => {
   }
   if (button.id === 'copy') {
     const lines = grocery(active().assignments,active().config).lines.filter(item => item.packs);
-    const text = lines.map(item => `${item.aisle}: ${item.name} — ${item.packs} × ${amount(item.pack,item.unit)}`).join('\n');
+    const text = lines.map(item => `${item.aisle}: ${item.name} — ${item.packs} × ${ingredientAmount(item.pack,item)}`).join('\n');
     try {await navigator.clipboard.writeText(text);announce('Shopping list copied.');}
     catch {showDialog('Copy shopping list',`<textarea aria-label="Shopping list" rows="12" style="width:100%" readonly>${esc(text)}</textarea>`);$('#dialog-content textarea').select();}
   }

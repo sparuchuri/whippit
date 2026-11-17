@@ -1,7 +1,7 @@
 import {sourceRecipes} from './source-catalog.js';
 import {readLibrary,writeLibrary} from './storage.js';
 import { byId, categories, ingredients, recipes, registerRecipe } from './catalog.js';
-import { amount } from './planner.js';
+import { amount, displayUnit, toDisplay, fromDisplay } from './planner.js';
 import { parseIngredient, pasteDraft, recipeMatches, suggestIngredient } from './recipe-tools.js';
 import { icon, dishMark } from './ui.js';
 
@@ -231,20 +231,21 @@ export function createRecipeLibrary({beforeSave,afterSave,onOpen,notify}) {
     $('#draft-use').value=['both','dinner','lunch'].includes(draft.use)?draft.use:'both';
     const list = $('#draft-ingredients');
     const choices = Object.values(ingredients).sort((a,b)=>a.name.localeCompare(b.name));
+    const rowItem=row=>ingredients[row.id] || {name:row.customName||'',unit:row.unit||'g',aisle:'Other groceries'};
     function drawRows(focusIndex) {
       list.innerHTML=rows.map((row,index) => `<section class="editor-ingredient" data-row="${index}">
         ${row.raw ? `<p class="muted">From recipe · ${escapeHtml(row.raw)}</p>` : ''}
         <div class="ingredient-fields"><label class="search-label">Grocery item ${index+1}
         <select data-field="id" aria-label="Grocery item ${index+1}">
         <option value="">Choose an item</option><option value="note" ${row.id==='note'?'selected':''}>Recipe note (not on shopping list)</option><option value="custom" ${row.id==='custom'?'selected':''}>New grocery item</option>
-        ${choices.map(item=>`<option value="${item.id}" ${row.id===item.id?'selected':''}>${escapeHtml(item.name)} · ${item.unit}</option>`).join('')}</select></label>
-        <label class="search-label">Amount${ingredients[row.id]?' ('+ingredients[row.id].unit+')':''}
-        <input type="number" data-field="quantity" aria-label="Quantity for ingredient ${index+1}" value="${row.quantity??''}" min=".01" max="100000" step="any"></label>
+        ${choices.map(item=>`<option value="${item.id}" ${row.id===item.id?'selected':''}>${escapeHtml(item.name)} · ${displayUnit(item)}</option>`).join('')}</select></label>
+        <label class="search-label">Amount${row.id&&row.id!=='note'?' ('+displayUnit(rowItem(row))+')':''}
+        <input type="number" data-field="quantity" aria-label="Quantity for ingredient ${index+1}" value="${row.quantity==null||row.quantity===''?'':Number(toDisplay(Number(row.quantity),rowItem(row)).toFixed(4))}" min=".01" max="100000" step="any"></label>
         <button type="button" data-remove="${index}" class="remove-ingredient" aria-label="Remove ingredient ${index+1}">×</button></div>
         ${row.id==='custom' ? `<div class="editor-grid">
           <label class="search-label">Item name <input data-field="customName" maxlength="60" value="${escapeHtml(row.customName)}"></label>
-          <label class="search-label">Unit <select data-field="unit">${['g','mL','each'].map(unit=>`<option ${unit===row.unit?'selected':''}>${unit}</option>`).join('')}</select></label>
-          <label class="search-label">Pack size <input data-field="pack" type="number" min=".01" step="any" value="${escapeHtml(row.pack)}"></label>
+          <label class="search-label">Unit <select data-field="unit">${['g','mL','each'].map(unit=>`<option value="${unit}" ${unit===row.unit?'selected':''}>${unit==='g'?'oz (weight)':unit==='mL'?'fl oz (volume)':'each'}</option>`).join('')}</select></label>
+          <label class="search-label">Pack size (${displayUnit(rowItem(row))}) <input data-field="pack" type="number" min=".01" step="any" value="${row.pack?Number(toDisplay(Number(row.pack),rowItem(row)).toFixed(4)):''}"></label>
           <label class="search-label">Pack price ($, optional) <input data-field="price" type="number" min="0" max="999" step=".01" value="${escapeHtml(row.price)}"></label></div>` : ''}
         </section>`).join('');
       if (focusIndex != null) list.querySelector(`[data-row="${focusIndex}"] select`)?.focus();
@@ -252,9 +253,11 @@ export function createRecipeLibrary({beforeSave,afterSave,onOpen,notify}) {
     list.oninput=event => {
       const el = event.target, row = el.closest('[data-row]');
       if (!row || !el.dataset.field) return;
-      rows[Number(row.dataset.row)][el.dataset.field] = el.value;
+      const target=rows[Number(row.dataset.row)];
+      target[el.dataset.field] = ['quantity','pack'].includes(el.dataset.field) && el.value!=='' ? fromDisplay(Number(el.value),rowItem(target)) : el.value;
     };
     list.onchange=event => {
+      if (event.target.dataset.field==='unit'){drawRows();return;}
       if (event.target.dataset.field!=='id') return;
       const index=Number(event.target.closest('[data-row]').dataset.row);
       const parsed=parseIngredient(rows[index].raw);

@@ -29,8 +29,14 @@ The normal development server has no signed-in identity. For isolated local QA o
 
 ## Verification and remaining limits
 
-20 automated checks cover account ownership, unsafe-origin rejection, optimistic concurrency, offline/reload recovery, account switching, catalog quality, meal constraints, servings and grocery math. Browser QA exercised migration, account sync between two preview clients, imported recipes, favorites, dinner/lunch plans, grocery checks/copy, and phone layouts.
+27 automated checks cover account ownership, unsafe-origin rejection, optimistic concurrency, offline/reload recovery, account switching, catalog quality, meal constraints, servings and grocery math. Browser QA exercised migration, account sync between two preview clients, imported recipes, favorites, dinner/lunch plans, grocery checks/copy, and phone layouts.
 
 Production deployment and the live `DB.account_documents` schema were verified. The cloud browser has no signed-in ChatGPT session, so the production OAuth round-trip and a physical iPhone Safari/home-screen session remain unverified. They are explicitly tracked in [WORK_QUEUE.md](WORK_QUEUE.md).
 
-The complete current source is saved in the existing Sites deployment repository. The GitHub mirror at `sparuchuri/whippit` still has the previous phone-design release: the integration rejected this update with HTTP 403 (Resource not accessible by integration). See [WORK_QUEUE.md](WORK_QUEUE.md), [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md), and [recipe provenance](docs/RESEARCH_NOTES.md).
+The current source is saved in the Sites deployment repository and mirrored to `sparuchuri/whippit`. GitHub write access was restored.
+
+Dinner planning prioritizes distinct flavors, cuisines and main ingredients. Optional dinner leftovers pair nights within two days and sum their guest portions into one cook. Less-preferred ingredients are a soft penalty; exclusions remain strict. Shopping ZIP is configurable per profile (default 94080), and meat quantities display in pounds while calculations retain canonical grams.
+
+Live weekly grocery prices remain pending a supported provider connection. Current package costs are example estimates, not ZIP-specific retailer quotes; manual overrides are optional.
+
+Display units are lb for meat, oz for other weights (g for tiny amounts below 5 g), and US fl oz for liquids. Counts retain each. Source text is credited verbatim; reviewed quantities use the standard display units.
