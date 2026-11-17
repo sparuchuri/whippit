@@ -97,14 +97,16 @@ test('meat pounds convert without changing stored recipe or grocery math',()=>{
  assert.equal(defaults().shoppingZip,'94080');
 });
 
-test('user recipes rank ahead of equivalent suggestions while preserving exclusions', async () => {
+test('user recipes can beat cheaper suggestions while preserving budget and exclusions', async () => {
   const {registerRecipe} = await import('./catalog.js');
   const original = byId['lemon-chicken'];
   const custom = {...original,id:'recipe_user_priority_test',origin:'user',custom:true,
+    parts:{...original.parts,coconut:400},
     source:{kind:'link',label:'Creator',url:'https://example.test/recipe'}};
   registerRecipe(custom);
   try {
-    const config = {...defaults(),dinnerDays:[0,1],budget:100};
+    const prices = Object.fromEntries(Object.keys(ingredients).map(id=>[id,0]));
+    const config = {...defaults(),dinnerDays:[0,1],budget:120,prices:{...prices,coconut:11000}};
     const suggestions = swaps([{id:'d0',day:0,type:'dinner',servings:2,recipeId:'bean-tacos'}],'d0',config);
     assert.ok(suggestions.findIndex(option=>option.recipeId===custom.id) <
       suggestions.findIndex(option=>option.recipeId===original.id));
@@ -112,10 +114,36 @@ test('user recipes rank ahead of equivalent suggestions while preserving exclusi
     assert.ok(generated.some(slot=>slot.recipeId===custom.id));
     const excluded = generate({...config,excludedIngredients:['chicken']}).options[0].assignments;
     assert.ok(excluded.every(slot=>slot.recipeId!==custom.id));
-    const tooExpensive = generate({...config,budget:1,prices:{chicken:99000}}).options[0].assignments;
+    const tooExpensive = generate({...config,budget:1}).options[0].assignments;
     assert.ok(tooExpensive.every(slot=>slot.recipeId!==custom.id));
   } finally {
     recipes.splice(recipes.indexOf(custom),1);
     delete byId[custom.id];
+  }
+});
+
+test('a saved recipe that shares perishables with the week gets extra swap priority', async () => {
+  const {registerRecipe} = await import('./catalog.js');
+  const template = {...byId['lemon-chicken'],origin:'user',parts:{orzo:100,egg:2}};
+  const saves = [
+    {...template,id:'recipe_a_test_lemon',parts:{...template.parts,lemon:1}},
+    {...template,id:'recipe_z_test_lime',parts:{...template.parts,lime:1}},
+  ];
+  saves.forEach(recipe=>registerRecipe(recipe));
+  try {
+    // Equalize cost and waste so the shared lime drives the ranking.
+    const prices = Object.fromEntries(Object.keys(ingredients).map(id=>[id,0]));
+    const config = {...defaults(),dinnerDays:[0,1],prices};
+    const choices = swaps([
+      {id:'d0',day:0,type:'dinner',servings:2,recipeId:'bean-tacos'},
+      {id:'d1',day:1,type:'dinner',servings:2,recipeId:'lemon-chicken'},
+    ],'d1',config);
+    const [lemon,lime] = saves.map(recipe=>choices.find(option=>option.recipeId===recipe.id));
+    assert.ok(lime.rank < lemon.rank);
+  } finally {
+    for (const recipe of saves) {
+      recipes.splice(recipes.indexOf(recipe),1);
+      delete byId[recipe.id];
+    }
   }
 });

@@ -83,10 +83,40 @@ export function varietyPenalty(assignments,config={}) {
   for(const slot of assignments)penalty+=Object.keys(byId[slot.recipeId].parts).filter(id=>config.lessPreferredIngredients?.includes(id)).length*3000;
   return penalty;
 }
+function userRecipeCredit(assignments, config) {
+  const saved = assignments.filter(slot => isUserRecipe(byId[slot.recipeId]));
+  if (!saved.length) return 0;
+
+  const weeklyNeeds = new Map();
+  for (const {recipeId,servings} of assignments) {
+    const recipe = byId[recipeId];
+    for (const [id,quantity] of Object.entries(recipe.parts)) {
+      if (stapleIds.has(id) || !ingredients[id]?.risk) continue;
+      weeklyNeeds.set(id, (weeklyNeeds.get(id) || 0) + quantity * servings / recipe.servings);
+    }
+  }
+
+  let credit = 0;
+  for (const {recipeId,servings} of saved) {
+    const recipe = byId[recipeId];
+    let reusedPacks = 0;
+    for (const [id,quantity] of Object.entries(recipe.parts)) {
+      if (!weeklyNeeds.has(id)) continue;
+      const item = ingredients[id];
+      const needed = quantity * servings / recipe.servings;
+      const onHand = config.pantry[id] === 'enough' ? needed : (config.pantry[id] || 0);
+      const usedElsewhere = Math.max(0, weeklyNeeds.get(id) - needed);
+      reusedPacks += Math.min(needed, usedElsewhere + onHand) / item.pack * item.risk;
+    }
+    // Favor a saved meal outright, then give it extra credit for putting perishables to use.
+    credit += 1900 + 750 * Math.min(1, reusedPacks);
+  }
+  return credit;
+}
+
 function score(assignments,basket,previous,config) {
-  const userRecipes = assignments.filter(slot => isUserRecipe(byId[slot.recipeId])).length;
   return basket.waste*.35 + basket.cents*.10 + varietyPenalty(assignments,config) +
-    assignments.filter(item=>previous.includes(item.recipeId)).length*250 - userRecipes*800;
+    assignments.filter(item=>previous.includes(item.recipeId)).length*250 - userRecipeCredit(assignments,config);
 }
 
 export function generate(config, locked={}, previous=[]) {
