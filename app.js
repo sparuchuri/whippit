@@ -240,7 +240,7 @@ function showRecipeDetails(item,servings,forLunch=false) {
   showDialog(item.name,`<div class="recipe-detail-meta"><p class="muted">${item.minutes} min · ${servings} servings</p>${library.favoriteButton(item)}</div>
     ${library.attribution(item)}${storage}
     <h3>Ingredients</h3><ul class="dialog-list">${list(Object.entries(item.parts).map(([key,value]) => esc(ingredients[key].name)+' · '+ingredientAmount(value*servings/item.servings,ingredients[key])))}</ul>
-    ${item.ingredientNotes?.length?'<h3>Recipe notes</h3><ul class="dialog-list">'+list(item.ingredientNotes.map(esc))+'</ul>':''}<h3>Steps</h3>${steps}`);
+    ${item.ingredientNotes?.length?'<h3>Recipe notes</h3><ul class="dialog-list">'+list(item.ingredientNotes.map(esc))+'</ul>':''}<h3>Steps</h3>${item.stepsNote?`<p class="notice">${esc(item.stepsNote)}</p>`: ''}${steps}`);
 }
 function showSwaps(id) {
   const plan = current, currentBasket = grocery(plan.assignments,shoppingConfig(plan.config));

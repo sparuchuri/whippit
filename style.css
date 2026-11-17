@@ -18,3 +18,6 @@
 #pantry-profile .pantry-checks{grid-template-columns:repeat(auto-fit,minmax(min(100%,175px),1fr))}
 #pantry-profile fieldset{margin:1rem 0}
 #pantry-profile blockquote{margin:.75rem 0;padding:.75rem 1rem;border-left:3px solid var(--line)}
+.collection-format{margin-top:1rem}
+.collection-format code{overflow-wrap:anywhere}
+.collection-example{max-height:18rem;overflow:auto;padding:.8rem;background:var(--paper);border:1px solid var(--line);border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere}

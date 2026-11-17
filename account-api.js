@@ -13,7 +13,7 @@ const accountJson=(data,status=200)=>new Response(JSON.stringify(data),{status,h
   'Content-Type':'application/json; charset=utf-8','Cache-Control':'private, no-store',
   'X-Content-Type-Options':'nosniff','Vary':'Cookie'
 }});
-const documentKey=/^(?:week:\d{4}-\d{2}-\d{2}|recipe:[\w-]{1,100}|recipe-source:tiktok-\d{15,25}|favorite:[\w-]{1,100}|preferences:default|pantry:profile)$/;
+const documentKey=/^(?:week:\d{4}-\d{2}-\d{2}|recipe:[\w-]{1,100}|recipe-source:(?:tiktok-\d{15,25}|collection-[a-f0-9]{32})|favorite:[\w-]{1,100}|preferences:default|pantry:profile)$/;
 function validDocument(key,value) {
   if (!documentKey.test(key)) return false;
   if (value===null) return true;
@@ -27,7 +27,8 @@ function validDocument(key,value) {
     value.config && Array.isArray(value.config.dinnerDays) && Array.isArray(value.config.lunchDays) &&
     Array.isArray(value.checked) && value.locks && value.assignments.every(s=>typeof s.recipeId==='string' && /^[\w-]+$/.test(s.recipeId) && Number.isFinite(s.servings) && s.servings>0 && s.servings<=500);
   if (key.startsWith('recipe-source:')) return value.id===key.slice(14) &&
-    typeof value.name==='string' && typeof value.url==='string' && Array.isArray(value.items) && Array.isArray(value.steps);
+    typeof value.name==='string' && typeof value.url==='string' && Array.isArray(value.items) && Array.isArray(value.steps) &&
+    (key.startsWith('recipe-source:tiktok-') || (typeof value.publisher==='string' && typeof value.author==='string'));
   if (key.startsWith('recipe:')) return value.recipe?.id===key.slice(7) &&
     typeof value.recipe.name==='string' && Array.isArray(value.recipe.steps) && value.recipe.parts &&
     Number.isFinite(value.recipe.servings) && value.recipe.servings>0 && Array.isArray(value.ingredients);

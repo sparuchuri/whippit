@@ -62,3 +62,12 @@ test('pantry profiles sync separately from weekly preferences and remain account
  const invalid=request('/api/sync','alice',[{key:'pantry:profile',value:{items:['soy'],unmatched:[42]},baseVersion:1}]);
  assert.equal((await handleAccountApi(invalid,e)).status,422);
 });
+
+test('attributed collection entries sync in the same account as older TikTok entries',async()=>{
+ const e=env();
+ const id='collection-0123456789abcdef0123456789abcdef';
+ const draft={id,name:'Dal',url:'https://cooking.nytimes.com/recipes/7517-dal',items:[],steps:[],publisher:'NYT Cooking',author:'Recipe author'};
+ const result=await write(e,'alice','recipe-source:'+id,draft);
+ assert.deepEqual(result.accepted[0].value,draft);
+ assert.deepEqual((await (await handleAccountApi(request('/api/state','bob'),e)).json()).documents,[]);
+});

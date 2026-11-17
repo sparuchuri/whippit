@@ -15,6 +15,7 @@ export const assetTypes = {
   'planner.js':'text/javascript; charset=utf-8',
   'planner-worker.js':'text/javascript; charset=utf-8',
   'recipe-tools.js':'text/javascript; charset=utf-8',
+  'recipe-collection.js':'text/javascript; charset=utf-8',
   'recipe-library.js':'text/javascript; charset=utf-8',
   'storage.js':'text/javascript; charset=utf-8',
   'pantry-profile.js':'text/javascript; charset=utf-8',
