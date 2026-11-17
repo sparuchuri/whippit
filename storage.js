@@ -31,6 +31,8 @@ export function writeRecipeSources(sources){
  for(const source of sources)ok=setValue('recipe-source:'+source.id,source)&&ok;
  return ok;
 }
+export const readPantryProfile=()=>value('pantry:profile') || {items:[],unmatched:[]};
+export const writePantryProfile=profile=>setValue('pantry:profile',profile);
 export const readPreferences=()=>value('preferences:default');
 export const writePreferences=config=>setValue('preferences:default',config);
 export function legacySummary(){

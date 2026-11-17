@@ -1,7 +1,8 @@
 import { byId, ingredients, staples, categories, recipes, tags } from './catalog.js';
 import { dayNames, defaults, generate, swaps, grocery, money, amount, weekKey, dateLabel, shiftWeek, slotsFor, eligibility, ingredientAmount, displayUnit, toDisplay, fromDisplay } from './planner.js';
-import {readWeeks,writeWeeks,initializeStorage,subscribeSync,readPreferences,writePreferences,readLibrary as readSavedLibrary} from './storage.js';
+import {readWeeks,writeWeeks,initializeStorage,subscribeSync,readPreferences,writePreferences,readPantryProfile,readLibrary as readSavedLibrary} from './storage.js';
 import {setupAccountUI} from './account-ui.js';
+import {createPantryProfile, withPantryProfile} from './pantry-profile.js';
 import {createRecipeLibrary} from './recipe-library.js';
 import {recipeMatches} from './recipe-tools.js';
 import {icon,dishMark} from './ui.js';
@@ -13,7 +14,14 @@ const setup = $('#setup-dialog');
 document.querySelectorAll('[data-icon]').forEach(el => {el.innerHTML=icon(el.dataset.icon);});
 const weeks = readWeeks();
 let formDirty=false;
-setupAccountUI();
+const openPantry = createPantryProfile(()=>{
+  lastPantry = JSON.stringify(readPantryProfile());
+  render();
+  announce('Pantry saved. Your grocery list uses what you have on hand.');
+});
+const shoppingConfig = config => withPantryProfile(config,readPantryProfile());
+setupAccountUI(openPantry);
+$('#open-pantry').onclick = openPantry;
 let week = weekKey(), view = 'week', options = [], optionIndex = 0, draft = null;
 let current = weeks[week] || null;
 let generation = null;
@@ -104,7 +112,7 @@ function readConfig() {
   };
 }
 function preserveChecks() {
-  const next = new Set(grocery(draft.assignments,draft.config).lines.filter(item => item.packs).map(item => item.signature));
+  const next = new Set(grocery(draft.assignments,shoppingConfig(draft.config)).lines.filter(item => item.packs).map(item => item.signature));
   draft.checked = (current?.checked || []).filter(signature => next.has(signature));
 }
 function preview(config, locks, option) {
@@ -197,7 +205,7 @@ function render() {
     results.innerHTML = `<section class="panel empty"><span class="empty-icon" aria-hidden="true">${view === 'week' ? '🍋' : '🧺'}</span><h2>${view === 'week' ? 'Let’s make it a delicious week.' : 'A little planning comes first.'}</h2><p>Pick your days, people, and budget. We’ll put together meals that share ingredients and keep waste down.</p><button class="primary" ${view === 'shop' ? 'data-go-week' : 'data-setup'}>${icon('sparkles')}${view === 'week' ? 'Plan my week' : 'Go to my week'}</button><div class="empty-steps"><span>① Pick your vibe</span><span>② Make it yours</span><span>③ Shop once</span></div></section>`;
     return;
   }
-  const basket = grocery(plan.assignments,plan.config);
+  const basket = grocery(plan.assignments,shoppingConfig(plan.config));
   results.innerHTML = view === 'week' ? renderWeek(plan,basket) : renderShop(plan,basket);
 }
 function changeWeek(delta) {
@@ -235,8 +243,8 @@ function showRecipeDetails(item,servings,forLunch=false) {
     ${item.ingredientNotes?.length?'<h3>Recipe notes</h3><ul class="dialog-list">'+list(item.ingredientNotes.map(esc))+'</ul>':''}<h3>Steps</h3>${steps}`);
 }
 function showSwaps(id) {
-  const plan = current, currentBasket = grocery(plan.assignments,plan.config);
-  const alternatives = swaps(plan.assignments,id,plan.config);
+  const plan = current, currentBasket = grocery(plan.assignments,shoppingConfig(plan.config));
+  const alternatives = swaps(plan.assignments,id,shoppingConfig(plan.config));
   showDialog('Swap this meal',alternatives.length
     ? '<label class="search-label">Find a swap <input id="swap-search" type="search" placeholder="Recipe or ingredient"></label><div id="swap-options"></div>'
     : '<p>There are no eligible swaps with these preferences.</p>');
@@ -305,7 +313,7 @@ form.addEventListener('submit',async event => {
   if (missingLocks.length) { announce('Unlock meals you want to remove before changing their dates.'); return; }
   const locks = current?.locks || {};
   const previous = [shiftWeek(week,-1),shiftWeek(week,-2)].flatMap(key => (weeks[key]?.assignments || []).map(item => item.recipeId));
-  const job = startPlan(config,locks,previous);
+  const job = startPlan(shoppingConfig(config),locks,previous);
   generation = job;
   const submit = form.querySelector('[type=submit]');
   submit.disabled = true;
@@ -375,7 +383,7 @@ results.addEventListener('click',async event => {
     return;
   }
   if (button.id === 'copy') {
-    const lines = grocery(active().assignments,active().config).lines.filter(item => item.packs);
+    const lines = grocery(active().assignments,shoppingConfig(active().config)).lines.filter(item => item.packs);
     const text = lines.map(item => `${item.aisle}: ${item.name} — ${item.packs} × ${ingredientAmount(item.pack,item)}`).join('\n');
     try {await navigator.clipboard.writeText(text);announce('Shopping list copied.');}
     catch {showDialog('Copy shopping list',`<textarea aria-label="Shopping list" rows="12" style="width:100%" readonly>${esc(text)}</textarea>`);$('#dialog-content textarea').select();}
@@ -396,12 +404,15 @@ results.addEventListener('change',event => {
 
 fill(current?.config || readPreferences() || defaults());
 form.addEventListener('change',()=>{formDirty=true; if(form.checkValidity())writePreferences(readConfig());});
+let lastPantry=JSON.stringify(readPantryProfile());
 let lastRemote=JSON.stringify(readWeeks());
 let lastLibrary=JSON.stringify(library.custom());
 let lastSavedLibrary=JSON.stringify(readSavedLibrary());
 subscribeSync(status=>{
   if(!status.remote)return;
   const updated=readWeeks(),signature=JSON.stringify(updated);
+  const pantrySignature=JSON.stringify(readPantryProfile()), pantryChanged=pantrySignature!==lastPantry;
+  lastPantry=pantrySignature;
   const settings=readConfig();
   const savedLibrarySignature=JSON.stringify(readSavedLibrary());
   const libraryChanged=savedLibrarySignature!==lastSavedLibrary;
@@ -415,6 +426,8 @@ subscribeSync(status=>{
     current=weeks[week] || null;lastRemote=signature;
     if(!draft&&!formDirty)fill(current?.config || readPreferences() || defaults());
     if(!draft)render();
+  }else if(pantryChanged && view!=='recipes'){
+    render();
   }else if(libraryChanged&&view==='recipes'&&!document.querySelector('#recipe-editor').open){
     library.refresh();
   }

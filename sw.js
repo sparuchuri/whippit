@@ -1,8 +1,8 @@
-const cacheName = 'whippit-shell-v10';
+const cacheName = 'whippit-shell-v11';
 const shell = [
   './','./index.html','./style.css','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png',
   './app.js','./ui.js','./catalog.js','./curated.js','./planner.js','./storage.js',
-  './source-catalog.js','./account-ui.js','./recipe-tools.js','./recipe-library.js','./planner-worker.js'
+  './source-catalog.js','./pantry-profile.js','./account-ui.js','./recipe-tools.js','./recipe-library.js','./planner-worker.js'
 ];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(cacheName).then(cache => cache.addAll(

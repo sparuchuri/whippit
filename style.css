@@ -10,3 +10,11 @@
 .top .account-button{margin-left:auto;display:flex;align-items:center;gap:.45rem;border:1px solid var(--line);font-size:.8rem;min-height:44px;white-space:nowrap}.sync-dot{width:8px;height:8px;border-radius:50%;background:#7b866b;flex:none}.sync-dot.good{background:#488b4c}.sync-dot.warning{background:#a86b1e}.account-banner{display:flex;align-items:center;gap:1rem;justify-content:space-between;background:var(--mint);padding:.85rem 1rem;border-radius:12px;margin-bottom:1.25rem}.account-banner p{font-size:.85rem;margin:.2rem 0 0}.account-banner button{flex:none;min-height:44px}.button-link{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:.6rem .9rem;border:1px solid var(--line);border-radius:9px;text-decoration:none}.button-link.primary{color:#fff}.account-state{background:var(--bg);padding:1rem;border-radius:12px;margin:1rem 0}.account-state p{font-size:.9rem}.migration,.sync-conflict{padding-top:1rem;border-top:1px solid var(--line);margin-top:1rem}.sync-conflict p{font-size:.85rem}.sync-conflict .actions button{height:auto;min-height:44px;white-space:normal}.account-state .notice{margin-top:.7rem}#account-dialog .dialog-top button{min-width:44px;min-height:44px}.account-banner[hidden]{display:none}
 @media(max-width:660px){.account-banner{align-items:start;flex-direction:column;gap:.7rem}.top .account-button{font-size:.75rem;padding:.5rem .65rem}.top-inner{gap:.5rem}.account-state{padding:.8rem}}
 .publisher-rating{color:var(--green);font-size:.85rem;font-weight:750}.publisher-rating span{font-weight:400;color:var(--muted)}.load-more{grid-column:1/-1;min-height:48px;margin:.8rem auto;width:min(100%,360px)}.source-intro{padding:.5rem 0}.source-intro p{font-size:.9rem}.recipe-card{min-width:0}.recipe-card .recipe-source{line-height:1.4}.library-filters button{min-height:44px}
+
+#pantry-profile{width:min(700px,calc(100vw - 2rem));max-height:90dvh}
+#pantry-profile textarea{width:100%;resize:vertical}
+#pantry-profile .pantry-import-actions{align-items:end;gap:.75rem;flex-wrap:wrap}
+#pantry-profile input[type=file]{max-width:100%}
+#pantry-profile .pantry-checks{grid-template-columns:repeat(auto-fit,minmax(min(100%,175px),1fr))}
+#pantry-profile fieldset{margin:1rem 0}
+#pantry-profile blockquote{margin:.75rem 0;padding:.75rem 1rem;border-left:3px solid var(--line)}

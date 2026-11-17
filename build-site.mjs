@@ -17,6 +17,7 @@ export const assetTypes = {
   'recipe-tools.js':'text/javascript; charset=utf-8',
   'recipe-library.js':'text/javascript; charset=utf-8',
   'storage.js':'text/javascript; charset=utf-8',
+  'pantry-profile.js':'text/javascript; charset=utf-8',
   'account-ui.js':'text/javascript; charset=utf-8',
   'sw.js':'text/javascript; charset=utf-8',
   'LICENSE':'text/plain; charset=utf-8',

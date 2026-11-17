@@ -52,3 +52,13 @@ test('TikTok source drafts sync to only their owning account',async()=>{
  const response=await handleAccountApi(request('/api/state','bob'),e);
  assert.deepEqual((await response.json()).documents,[]);
 });
+
+test('pantry profiles sync separately from weekly preferences and remain account scoped',async()=>{
+ const e=env();
+ const profile={items:['soy','cumin'],unmatched:['Dark soy sauce']};
+ const result=await write(e,'alice','pantry:profile',profile);
+ assert.deepEqual(result.accepted[0].value,profile);
+ assert.deepEqual((await (await handleAccountApi(request('/api/state','bob'),e)).json()).documents,[]);
+ const invalid=request('/api/sync','alice',[{key:'pantry:profile',value:{items:['soy'],unmatched:[42]},baseVersion:1}]);
+ assert.equal((await handleAccountApi(invalid,e)).status,422);
+});
