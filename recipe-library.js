@@ -1,5 +1,5 @@
 import {sourceRecipes} from './source-catalog.js';
-import {readLibrary,writeLibrary} from './storage.js';
+import {readLibrary,writeLibrary,readRecipeSources,writeRecipeSources} from './storage.js';
 import { byId, categories, ingredients, recipes, registerRecipe } from './catalog.js';
 import { amount, displayUnit, toDisplay, fromDisplay } from './planner.js';
 import { parseIngredient, pasteDraft, recipeMatches, suggestIngredient } from './recipe-tools.js';
@@ -80,6 +80,7 @@ export function createRecipeLibrary({beforeSave,afterSave,onOpen,notify}) {
   }
 
   function renderGrid(focusId) {
+    if(filter==='collection'){renderCollection();return;}
     const visible = [...recipes,...sourceRecipes].filter(item =>
       (filter !== 'ready' || !sourceById[item.id]) &&
       (filter !== 'favorites' || favorites.has(item.id)) &&
@@ -107,7 +108,7 @@ export function createRecipeLibrary({beforeSave,afterSave,onOpen,notify}) {
       <div class="panel library-controls"><label class="search-label">Search recipes
       <input id="recipe-search" type="search" placeholder="Try spicy tofu, cozy, or chicken" value="${escapeHtml(query)}"></label>
       <div class="library-filters" aria-label="Recipe filters">
-      ${[['all','Discover'],['ready','Ready to plan'],['favorites','Favorites'],['mine','My recipes']].map(([id,label]) =>
+      ${[['all','Discover'],['ready','Ready to plan'],['favorites','Favorites'],['mine','My recipes'],['collection','TikTok collection']].map(([id,label]) =>
         `<button type="button" data-library-filter="${id}" aria-pressed="${filter===id}">${label}</button>`).join('')}
       <label class="toggle"><input id="prep-only" type="checkbox" ${lunchOnly?'checked':''}> Lunch prep</label></div>
       <div class="vibe-chips" aria-label="Recipe moods">${[['cozy','☕ Cozy'],['spicy','🌶 Spicy'],['quick','⚡ Quick'],['vegetarian','🥬 Veggie']].map(([value,label])=>`<button type="button" data-vibe="${value}" aria-pressed="${query===value}">${label}</button>`).join('')}</div></div>
@@ -134,10 +135,78 @@ export function createRecipeLibrary({beforeSave,afterSave,onOpen,notify}) {
     root.querySelector('#recipe-grid').onclick = event => {
       const button = event.target.closest('button');
       if (button?.dataset.favorite) markFavorite(button.dataset.favorite);
-      if (button?.dataset.openRecipe) {const id=button.dataset.openRecipe;if(sourceById[id])openSource(sourceById[id]);else onOpen(id);}
+      if (button?.dataset.openRecipe) {const id=button.dataset.openRecipe;if(id.startsWith('tiktok-'))openCollectionSource(id);else if(sourceById[id])openSource(sourceById[id]);else onOpen(id);}
       if(button?.id==='more-recipes'){visibleLimit+=36;renderGrid();}
     };
     renderGrid();
+  }
+
+  function renderCollection() {
+    const terms=query.toLowerCase().split(/\s+/).filter(Boolean);
+    const sources=readRecipeSources().filter(item=>terms.every(term=>
+      [item.name,item.creator,...item.items].join(' ').toLowerCase().includes(term)));
+    const grid=root.querySelector('#recipe-grid');
+    root.querySelector('#recipe-count').textContent=sources.length+' TikTok sources';
+    grid.innerHTML=sources.slice(0,visibleLimit).map(item=>`<article class="panel recipe-card">
+      <h3><button type="button" data-open-recipe="${escapeHtml(item.id)}" class="meal-title">${escapeHtml(item.name)}</button></h3>
+      <p class="muted">@${escapeHtml(item.creator)} · ${item.items.length?'Ingredients to review':'See original video'}</p>
+    </article>`).join('') || '<div class="panel empty"><p>No TikTok sources match. Use Add recipe to import a collection file.</p></div>';
+    if(sources.length>visibleLimit)grid.insertAdjacentHTML('beforeend','<button class="load-more" type="button" id="more-recipes">Show more recipes</button>');
+  }
+
+  function openCollectionSource(id) {
+    const item=readRecipeSources().find(source=>source.id===id);
+    if(!item)return;
+    const saved=recipes.find(recipe=>recipe.source?.url===item.url);
+    frame(escapeHtml(item.name),`<p class="muted">@${escapeHtml(item.creator)}</p>
+      <p>Review the original video for any missing ingredients, servings or instructions.</p>
+      <div class="actions"><a class="button-link" href="${escapeHtml(safeExternalUrl(item.url))}" target="_blank" rel="noopener noreferrer">Open TikTok video ↗</a>
+      <button class="primary" id="collection-review">${saved?'Open saved recipe':'Review for planner'}</button></div>
+      ${item.items.length?`<h3>Ingredients to review</h3><ul class="dialog-list">${item.items.map(line=>`<li>${escapeHtml(line)}</li>`).join('')}</ul>`:''}`);
+    $('#collection-review').onclick=()=>saved?(editor.close(),onOpen(saved.id)):showDraft({...item,reviewYield:!item.servings,servings:item.servings||'',minutes:item.minutes||'',
+      source:{kind:'link',label:'@'+item.creator,url:item.url}});
+  }
+
+  function openCollectionImport() {
+    frame('Import TikTok collection',`<form id="collection-import">
+      <p>Choose a Whippit collection JSON file. Sources are saved in your recipe box for review.</p>
+      <label class="search-label">Collection file <input id="collection-file" type="file" accept=".json,application/json" required></label>
+      <div class="form-message" id="collection-status" role="status"></div>
+      <button type="submit" class="primary">Import collection</button></form>`);
+    $('#collection-import').onsubmit=async event=>{
+      event.preventDefault();
+      const status=$('#collection-status');
+      try{
+        const file=$('#collection-file').files[0];
+        if(!file||file.size>1_000_000)throw new Error('Choose a collection JSON file under 1 MB.');
+        const bundle=JSON.parse(await file.text());
+        if(bundle?.format!=='whippit-tiktok-v1'||!Array.isArray(bundle.recipes)||bundle.recipes.length>500)
+          throw new Error('This file is not a supported Whippit collection.');
+        const existing=new Set([...readRecipeSources().map(item=>item.id),...recipes.flatMap(item=>{
+          const match=item.source?.url?.match(/tiktok\.com\/@[^/]+\/video\/(\d+)/);
+          return match?['tiktok-'+match[1]]:[];
+        })]);
+        const sources=[];
+        for(const row of bundle.recipes){
+          const match=typeof row?.url==='string' && row.url.match(/^https:\/\/www\.tiktok\.com\/@([a-zA-Z0-9_.]+)\/video\/(\d{15,25})$/);
+          if(!match||typeof row.name!=='string'||!row.name.trim())throw new Error('A collection entry has an invalid title or video URL.');
+          const id='tiktok-'+match[2];
+          if(existing.has(id))continue;
+          const lines=value=>Array.isArray(value)?value.filter(line=>typeof line==='string').slice(0,40).map(line=>line.slice(0,400)):[];
+          sources.push({id,url:row.url,creator:match[1],name:row.name.trim().slice(0,100),
+            items:lines(row.items),steps:lines(row.steps),
+            servings:Number.isInteger(row.servings)&&row.servings>=1&&row.servings<=48?row.servings:null,
+            minutes:Number.isInteger(row.minutes)&&row.minutes>=1&&row.minutes<=720?row.minutes:null});
+          existing.add(id);
+        }
+        const stored=writeRecipeSources(sources);
+        filter='collection';query='';lunchOnly=false;visibleLimit=36;
+        render(root);
+        status.textContent=stored?`Imported ${sources.length} sources. ${bundle.recipes.length-sources.length} already in your recipe box.`:
+          'Device storage is full. Keep this page open until sync completes.';
+        status.tabIndex=-1;status.focus();
+      }catch(error){status.textContent=error instanceof SyntaxError?'This file is not valid JSON.':error.message;}
+    };
   }
 
   function openSource(item) {
@@ -163,8 +232,9 @@ export function createRecipeLibrary({beforeSave,afterSave,onOpen,notify}) {
       <p class="muted">Import a link from a supported recipe publisher, or paste the ingredients and steps from your own notes.</p>
       <div id="import-status" role="status" class="form-message"></div>
       <div class="actions"><button type="submit" class="primary">Review recipe</button>
-      <button type="button" id="recipe-blank">Enter details manually</button></div></form>`);
+      <button type="button" id="recipe-blank">Enter details manually</button><button type="button" id="recipe-collection">Import TikTok collection file</button></div></form>`);
     const form = $('#recipe-import-form');
+    $('#recipe-collection').onclick=openCollectionImport;
     $('#recipe-blank').onclick=() => showDraft({items:[],name:'',steps:[],servings:2,minutes:30});
     form.onsubmit=async event => {
       event.preventDefault();

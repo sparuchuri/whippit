@@ -23,6 +23,14 @@ export function writeWeeks(weeks){let ok=true;for(const [key,plan]of Object.entr
 export function readLibrary(){return {custom:Object.entries(state.documents).filter(([key,doc])=>key.startsWith('recipe:')&&doc.value).map(([,doc])=>doc.value),favorites:Object.entries(state.documents).filter(([key,doc])=>key.startsWith('favorite:')&&doc.value===true).map(([key])=>key.slice(9))};}
 export function writeLibrary(data){let ok=true;for(const pack of data.custom)ok=setValue('recipe:'+pack.recipe.id,pack)&&ok;
  const favorites=new Set(data.favorites);for(const id of new Set([...readLibrary().favorites,...favorites]))ok=setValue('favorite:'+id,favorites.has(id))&&ok;return ok;}
+export function readRecipeSources(){
+ return Object.entries(state.documents).filter(([key,doc])=>key.startsWith('recipe-source:')&&doc.value).map(([,doc])=>doc.value);
+}
+export function writeRecipeSources(sources){
+ let ok=true;
+ for(const source of sources)ok=setValue('recipe-source:'+source.id,source)&&ok;
+ return ok;
+}
 export const readPreferences=()=>value('preferences:default');
 export const writePreferences=config=>setValue('preferences:default',config);
 export function legacySummary(){

@@ -42,3 +42,13 @@ test('account mismatch or missing expectation rejects writes before accessing st
   assert.equal((await (await handleAccountApi(request('/api/state','bob'),e)).json()).documents.length,0);
  }
 });
+
+test('TikTok source drafts sync to only their owning account',async()=>{
+ const e=env();
+ const id='tiktok-7701102965385383199';
+ const draft={id,name:'Greek lemon chicken',url:'https://www.tiktok.com/@creator/video/7701102965385383199',items:[],steps:[]};
+ const result=await write(e,'alice','recipe-source:'+id,draft);
+ assert.deepEqual(result.accepted[0].value,draft);
+ const response=await handleAccountApi(request('/api/state','bob'),e);
+ assert.deepEqual((await response.json()).documents,[]);
+});
