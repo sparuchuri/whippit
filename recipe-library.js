@@ -28,6 +28,7 @@ export function safeExternalUrl(raw) {
   }
 }
 
+const hasRecipeDraft = item => item.items.length && (item.steps.length || item.recipeUrl || (item.url && !item.id.startsWith('tiktok-')));
 const useLabel = item => ({both:'Dinner or prep lunch',dinner:'Dinner',lunch:'Prep lunch'}[item.use]);
 function sourceDescription(item) {
   if (item.source?.kind === 'publisher') return item.source.label;
@@ -61,7 +62,7 @@ export function createRecipeLibrary({beforeSave,afterSave,onOpen,notify}) {
   document.body.append(editor);
 
   let filter = 'all', query = '', lunchOnly = false, root = null, visibleLimit=36;
-  let editorRun = 0;
+  let editorRun = 0, collectionFilter = 'recipes';
   editor.addEventListener('close',() => {editorRun++;});
 
   function persist() {
@@ -138,6 +139,7 @@ export function createRecipeLibrary({beforeSave,afterSave,onOpen,notify}) {
       const button = event.target.closest('button');
       if (button?.dataset.favorite) markFavorite(button.dataset.favorite);
       if (button?.dataset.openRecipe) {const id=button.dataset.openRecipe;if(id.startsWith('tiktok-') || id.startsWith('collection-'))openCollectionSource(id);else if(sourceById[id])openSource(sourceById[id]);else onOpen(id);}
+      if(button?.dataset.collectionFilter){collectionFilter=button.dataset.collectionFilter;visibleLimit=36;renderGrid();}
       if(button?.id==='more-recipes'){visibleLimit+=36;renderGrid();}
     };
     renderGrid();
@@ -145,14 +147,20 @@ export function createRecipeLibrary({beforeSave,afterSave,onOpen,notify}) {
 
   function renderCollection() {
     const terms=query.toLowerCase().split(/\s+/).filter(Boolean);
-    const sources=readRecipeSources().filter(item=>terms.every(term=>
+    const matches=readRecipeSources().filter(item=>terms.every(term=>
       [item.name,collectionCredit(item),...item.items].join(' ').toLowerCase().includes(term)));
+    const drafts=matches.filter(hasRecipeDraft);
+    const references=matches.filter(item=>!hasRecipeDraft(item));
+    const sources=collectionFilter==='recipes'?drafts:collectionFilter==='references'?references:matches;
     const grid=root.querySelector('#recipe-grid');
     root.querySelector('#recipe-count').textContent=sources.length+(sources.length===1?' imported recipe':' imported recipes');
-    grid.innerHTML=sources.slice(0,visibleLimit).map(item=>`<article class="panel recipe-card">
+    grid.innerHTML=`<div class="collection-filter" aria-label="Collection details">
+      ${[['recipes','Recipe drafts',drafts.length],['references','Needs recipe details',references.length],['all','All',matches.length]].map(([id,label,count])=>
+        `<button type="button" data-collection-filter="${id}" aria-pressed="${collectionFilter===id}">${label} (${count})</button>`).join('')}
+    </div>` + (sources.slice(0,visibleLimit).map(item=>`<article class="panel recipe-card">
       <h3><button type="button" data-open-recipe="${escapeHtml(item.id)}" class="meal-title">${escapeHtml(item.name)}</button></h3>
-      <p class="muted">${escapeHtml(collectionCredit(item))} · ${item.items.length?'Ingredients to review':'Source link'}</p>
-    </article>`).join('') || '<div class="panel empty"><p>No imported recipes match. Use Add recipe to import a collection file.</p></div>';
+      <p class="muted">${escapeHtml(collectionCredit(item))} · ${hasRecipeDraft(item)?'Review for planner':'Needs recipe details'}</p>
+    </article>`).join('') || '<div class="panel empty"><p>No entries in this view.</p></div>');
     if(sources.length>visibleLimit)grid.insertAdjacentHTML('beforeend','<button class="load-more" type="button" id="more-recipes">Show more recipes</button>');
   }
 
@@ -160,6 +168,7 @@ export function createRecipeLibrary({beforeSave,afterSave,onOpen,notify}) {
     const item=readRecipeSources().find(source=>source.id===id);
     if(!item)return;
     const sourceUrl=safeExternalUrl(item.url);
+    const recipeUrl=safeExternalUrl(item.recipeUrl);
     const credit=collectionCredit(item);
     const saved=recipes.find(recipe=>{
       if (!isUserRecipe(recipe)) return false;
@@ -169,14 +178,16 @@ export function createRecipeLibrary({beforeSave,afterSave,onOpen,notify}) {
     });
     frame(escapeHtml(item.name),`<p class="muted">${escapeHtml(credit)} · Added by you</p>
       ${item.stepsNote?`<p class="notice">${escapeHtml(item.stepsNote)}</p>`:''}
-      <div class="actions">${sourceUrl?`<a class="button-link" href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open original recipe ↗</a>`:''}
-      <button class="primary" id="collection-review">${saved?'Open saved recipe':'Review for planner'}</button></div>
+      ${!saved && !hasRecipeDraft(item)?'<p class="notice">Add ingredients, amounts, servings, and cooking steps or a written recipe link before using this in a plan or shopping list.</p>':''}
+      <div class="actions">${recipeUrl?`<a class="button-link" href="${escapeHtml(recipeUrl)}" target="_blank" rel="noopener noreferrer">Open written recipe ↗</a>`:''}
+      ${sourceUrl?`<a class="button-link" href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open original source ↗</a>`:''}
+      <button class="primary" id="collection-review">${saved?'Open saved recipe':hasRecipeDraft(item)?'Review for planner':'Add recipe details'}</button></div>
       ${item.items.length?`<h3>Ingredients to review</h3><ul class="dialog-list">${item.items.map(line=>`<li>${escapeHtml(line)}</li>`).join('')}</ul>`:''}`);
     $('#collection-review').onclick=()=>{
       if (saved) {editor.close();onOpen(saved.id);return;}
       showDraft({...item,collectionId:item.id,reviewYield:!item.servings || Boolean(item.servingsLabel),
         servings:item.servings||'',minutes:item.minutes||'',
-        source:{kind:'link',label:credit,url:sourceUrl}});
+        source:{kind:'link',label:credit,url:recipeUrl||sourceUrl,video:recipeUrl&&sourceUrl?sourceUrl:undefined}});
     };
   }
 
@@ -216,12 +227,13 @@ export function createRecipeLibrary({beforeSave,afterSave,onOpen,notify}) {
         const file=$('#collection-file').files[0];
         if(!file||file.size>1_000_000)throw new Error('Choose a collection JSON file under 1 MB.');
         const bundle=JSON.parse((await file.text()).replace(/^\uFEFF/,''));
-        const {sources,duplicates}=await prepareCollection(bundle,readRecipeSources(),recipes.filter(isUserRecipe));
+        const {sources,duplicates,updated}=await prepareCollection(bundle,readRecipeSources(),recipes.filter(isUserRecipe));
         if (!editor.open || !form.isConnected) return;
         const stored=writeRecipeSources(sources);
-        filter='collection';query='';lunchOnly=false;visibleLimit=36;
+        filter='collection';collectionFilter=sources.some(hasRecipeDraft)?'recipes':'all';query='';lunchOnly=false;visibleLimit=36;
         render(root);
-        status.textContent=stored?`Imported ${sources.length} ${sources.length===1?'recipe':'recipes'}. ${duplicates} duplicates skipped.`:
+        const added=sources.length-updated;
+        status.textContent=stored?`Imported ${added} ${added===1?'entry':'entries'}.${updated?' Added recipe details to '+updated+' existing entries.':''} ${duplicates} duplicates skipped.`:
           'Device storage is full. Keep this page open until sync completes.';
         status.tabIndex=-1;status.focus();
       }catch(error){status.textContent=error instanceof SyntaxError?'This file is not valid JSON.':error.message;}
@@ -314,6 +326,7 @@ export function createRecipeLibrary({beforeSave,afterSave,onOpen,notify}) {
       <label class="search-label">Tags <input id="draft-tags" maxlength="120" placeholder="Spicy, vegetarian, one-pot"></label>
       <fieldset class="ingredient-editor"><legend>Ingredients</legend><div id="draft-ingredients"></div>
       <button type="button" id="draft-add">Add ingredient</button></fieldset>
+      ${draft.collectionId?.startsWith('tiktok-')&&!draft.source?.video?`<label class="search-label">Written recipe link (optional) <input id="draft-written-url" type="url" maxlength="2000" placeholder="https://…"></label>`:''}
       <label class="search-label">Cooking steps <textarea id="draft-steps" rows="4" maxlength="10000" placeholder="One step per line">${escapeHtml((draft.steps || []).join('\n'))}</textarea></label>
       ${draft.source ? `<p class="muted">Source · ${escapeHtml(draft.source.label)}${draft.source.url?'. The original recipe opens from the recipe card.':''}</p>` : ''}
       <label class="toggle"><input id="draft-favorite" type="checkbox"> Add to favorites</label>
@@ -373,7 +386,14 @@ export function createRecipeLibrary({beforeSave,afterSave,onOpen,notify}) {
       const error=$('#review-error');
       const name=$('#draft-name').value.trim();
       const steps=$('#draft-steps').value.split(/\n/).map(value=>value.trim()).filter(Boolean);
-      if (!name || !rows.length || (!steps.length && !draft.source?.url)) {
+      const writtenInput=$('#draft-written-url')?.value.trim();
+      const writtenUrl=safeExternalUrl(writtenInput);
+      if(writtenInput && (!writtenUrl || collectionSourceKey(writtenUrl).startsWith('tiktok-'))) {
+        error.textContent='Enter an HTTPS link to the written recipe.';
+        return;
+      }
+      const source=writtenUrl ? {...draft.source,url:writtenUrl,video:draft.source.url} : draft.source;
+      if (!name || !rows.length || (!steps.length && (!source?.url || (draft.collectionId?.startsWith('tiktok-')&&!source.video)))) {
         error.textContent='Add a name, at least one ingredient, and cooking steps or a source link.';
         return;
       }
@@ -408,7 +428,7 @@ export function createRecipeLibrary({beforeSave,afterSave,onOpen,notify}) {
       const recipe={id:'recipe_'+crypto.randomUUID(),name,steps,parts,ingredientNotes,custom:true,origin:'user',
         servings:Number($('#draft-yield').value),minutes:Number($('#draft-time').value),
         cuisine:$('#draft-cuisine').value.trim() || 'Personal recipe',protein,use:$('#draft-use').value,styles,
-        source:draft.source};
+        source};
       if (draft.collectionId) {
         recipe.collectionId=draft.collectionId;
         if (draft.stepsNote) recipe.stepsNote=draft.stepsNote;

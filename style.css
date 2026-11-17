@@ -21,3 +21,5 @@
 .collection-format{margin-top:1rem}
 .collection-format code{overflow-wrap:anywhere}
 .collection-example{max-height:18rem;overflow:auto;padding:.8rem;background:var(--paper);border:1px solid var(--line);border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.collection-filter{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:.4rem}
+.collection-filter button[aria-pressed=true]{background:var(--green);color:white}

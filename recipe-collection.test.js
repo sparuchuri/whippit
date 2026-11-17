@@ -37,3 +37,17 @@ test('source links deduplicate across tracking parameters and reject non-HTTPS l
   file.recipes.push({name:'Bad link',url:'javascript:alert(1)'});
   await assert.rejects(prepareCollection(file),/Recipe 3: use a valid HTTPS/);
 });
+
+test('a recovery file refreshes incomplete drafts by video ID and never replaces saved recipes',async()=>{
+ const row={name:'Chicken',url:'https://www.tiktok.com/@cook/video/7701102965385383199'};
+ const file={format:collectionFormat,recipes:[row]};
+ const original=(await prepareCollection(file)).sources;
+ const recovery={...file,fillMissingDetails:true,recipes:[{...row,servings:2,
+   recipeUrl:'https://example.com/chicken',items:['1 lb ground chicken'],steps:['Shape patties and cook.']}]};
+ const result=await prepareCollection(recovery,original);
+ assert.equal(result.updated,1);
+ assert.equal(result.sources[0].id,original[0].id);
+ assert.equal(result.sources[0].recipeUrl,'https://example.com/chicken');
+ assert.equal((await prepareCollection(recovery,result.sources)).duplicates,1);
+ assert.equal((await prepareCollection(recovery,original,[{collectionId:original[0].id}])).updated,0);
+});

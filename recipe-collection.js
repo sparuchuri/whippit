@@ -40,8 +40,11 @@ export async function prepareCollection(bundle, imported=[], saved=[]) {
   }
   if (!bundle.recipes.length || bundle.recipes.length>500) throw new Error('Include 1 to 500 recipes per file.');
   const seen = new Set([...imported.map(row=>row.id),...saved.map(existingKey).filter(Boolean)]);
+  const previous = new Map(imported.map(row=>[row.id,row]));
+  const savedKeys = new Set(saved.flatMap(recipe=>[existingKey(recipe),recipe.collectionId].filter(Boolean)));
   const sources = [];
-  let duplicates = 0;
+  const processed = new Set();
+  let duplicates = 0, updated = 0;
   for (const [index,row] of bundle.recipes.entries()) {
     const fail = message => new Error('Recipe '+(index+1)+': '+message);
     if (!row || typeof row!=='object' || Array.isArray(row)) throw fail('expected a recipe object.');
@@ -75,20 +78,29 @@ export async function prepareCollection(bundle, imported=[], saved=[]) {
     const bytes = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(identity));
     const hash = [...new Uint8Array(bytes)].slice(0,16).map(byte=>byte.toString(16).padStart(2,'0')).join('');
     const id = creator ? key : 'collection-'+hash;
-    if (seen.has(identity) || seen.has(id)) {
+    const old=previous.get(id);
+    const upgrade=bundle.fillMissingDetails===true && old && !old.steps?.length &&
+      items.length && steps.length && number(row.servings,48) && !savedKeys.has(identity) && !savedKeys.has(id);
+    if (processed.has(id) || ((seen.has(identity) || seen.has(id)) && !upgrade)) {
       duplicates++;
       continue;
     }
+    processed.add(id);
     seen.add(identity);
     seen.add(id);
+    if(upgrade)updated++;
+    const recipeUrl = text(row.recipeUrl,2000);
+    if(recipeUrl) {
+      try {collectionSourceKey(recipeUrl);} catch {throw fail('use a valid HTTPS recipe URL.');}
+    }
     const incomplete = row.stepsStatus==='partial' || row.stepsStatus==='missing';
     const stepsNote = text(row.stepsNote,500) || (incomplete ? 'The imported steps are incomplete. Check the original recipe for the full method.' : '');
     sources.push({
-      id,origin:'user',name,url,publisher:publisher || 'Personal recipe',author,items,steps,
+      id,origin:'user',name,url,recipeUrl,publisher:publisher || 'Personal recipe',author,items,steps,
       servings:number(row.servings,48),minutes:number(row.minutes,720),
       servingsLabel:text(row.servingsLabel,100),stepsNote,
       cuisine:text(row.cuisine,45),
     });
   }
-  return {sources,duplicates};
+  return {sources,duplicates,updated};
 }
