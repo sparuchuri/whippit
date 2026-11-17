@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#f7f7ed"><meta name="description" content="Plan dinners and prep lunches, then shop from one grocery list.">
+<link rel="manifest" href="./manifest.webmanifest"><link rel="icon" href="./icon.svg"><link rel="apple-touch-icon" href="./icon-192.png">
+<link rel="stylesheet" href="./style.css"><title>Whippit | Weekly meal planner</title>
+</head>
+<body>
+<header class="top"><div class="top-inner"><a class="brand" href="./" aria-label="Whippit home"><span class="logo" aria-hidden="true">w</span> whippit</a><nav aria-label="Main"><button data-view="week" aria-current="page">Week</button><button data-view="shop">Groceries</button></nav><span class="local">Saved on this device</span></div></header>
+<main>
+<section class="intro"><div><h1>Your week in meals.</h1><p>Plan dinners, prep lunches, and shop for both in one trip.</p></div><div class="week-picker"><button id="prev" type="button" aria-label="Previous week">‹</button><strong id="date"></strong><button id="next" type="button" aria-label="Next week">›</button></div></section>
+<div class="layout">
+<aside class="settings panel" id="settings"><h2>Plan setup</h2>
+<form id="form">
+<fieldset><legend>Dinners</legend><div id="dinner-days" class="days"></div><label class="field">People at dinner <input name="dinnerPeople" type="number" min="1" max="8" required></label><details><summary>Servings by night</summary><div id="guests"></div></details></fieldset>
+<fieldset><legend>Meal-prep lunches</legend><label class="toggle"><input name="lunchEnabled" type="checkbox"> Add lunches</label><div id="lunch-settings"><div id="lunch-days" class="days"></div><label class="field">People at lunch <input name="lunchPeople" type="number" min="1" max="8" required></label><label class="toggle"><input name="splitLunch" type="checkbox"> Split into two batches for 4–5 days</label></div></fieldset>
+<fieldset><legend>Budget and preferences</legend><label class="field">Grocery target ($) <input name="budget" type="number" min="1" max="5000" step=".01" required></label><label class="field stacked">Include a theme <select name="theme"></select></label><button class="text-button" type="button" id="suggest">Suggest a theme</button><details><summary>Exclude cuisines or meal types</summary><div id="exclusions" class="checks"></div></details><details><summary>Exclude ingredients</summary><div id="ingredients" class="checks"></div></details><details><summary>Adjust pantry and grocery estimates</summary><div id="pantry" class="checks"></div><p class="muted">Package prices are sample estimates. Adjust them from your receipt.</p><div id="prices"></div></details></fieldset>
+<button class="primary full" type="submit">Generate week</button>
+</form></aside>
+<section class="results" aria-label="Weekly plan and shopping list"><div id="status" role="status" aria-live="polite"></div><div id="results"></div></section>
+</div></main>
+<dialog id="detail"><div class="dialog-top"><h2 id="dialog-title"></h2><button id="close" aria-label="Close dialog">×</button></div><div id="dialog-content"></div></dialog>
+<noscript>Enable JavaScript to use the weekly meal planner.</noscript>
+<script type="module" src="./app.js"></script>
+</body></html>
